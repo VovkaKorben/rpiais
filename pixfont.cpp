@@ -82,8 +82,10 @@ bitmap_font::bitmap_font(const char * filename)
       //uint8 * data;      int32 * start_lut, * width_lut;
       bmp_image bmp(filename);
       if (!bmp.is_loaded())
+      {
+            cout << "Can't load bitmap font file " << filename << "\n";
             return;
-
+      }
       int32 x = 0;
       uint8 p, prev = 0;
       count = 0;

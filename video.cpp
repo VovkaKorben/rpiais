@@ -1,10 +1,15 @@
+#include <unistd.h>
 #include <algorithm>
+#include <fcntl.h>
+#include <linux/fb.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <stdlib.h>
+#include <string.h>
 #include "video.h"
 
-//#include "PixelToaster.h"
-//using namespace PixelToaster;
-//Display * pix_screen;
-//vector<TrueColorPixel> pixels(VIEW_WIDTH * VIEW_HEIGHT);
+int CENTER_X = 0, CENTER_Y = 0;
+
 irect VIEWBOX_RECT, SCREEN_RECT;
 
 //frame_func frame_handler;
@@ -20,6 +25,13 @@ struct bucketset {
       bucket barr[max_vertices];
 };
 bucketset aet, et[VIEW_HEIGHT];
+bitmap_font * small_font;
+
+int fb_handle = 0, SCANLINE_LEN = 0, BYTES_PER_PIXEL = 0;
+intptr_t pix_ptr; // address to window start
+puint8 fb_pixels; // fb start pointer
+long int  screensize = 0;
+
 /*
 
 void video_loop_start() {
@@ -29,58 +41,118 @@ void video_loop_start() {
     //        frame_handler();
       }
 }
-int video_init(frame_func ff) {
-  //    frame_handler = ff;
-      cout << "using PixelToaster as render system\n";
 
-
-      //bitmap_font fnt("C:\\ais\\cpp\\include\\font.bmp"); // load bitmap font
-      //load_font("C:\\ais\\cpp\\include\\font.bmp"); // load bitmap font
-      //pix_screen.listener();
-
-   //   pix_screen = new PixelToaster::Display("TrueColor Example", VIEW_WIDTH, VIEW_HEIGHT, PixelToaster::Output::Default, PixelToaster::Mode::TrueColor);
-      if (!pix_screen.open("AIS", VIEW_WIDTH, VIEW_HEIGHT, PixelToaster::Output::Default, PixelToaster::Mode::TrueColor))
-            return 1;
-
-
-      return 0;
 
 }*/
-void video_frame_start(const rgba background) {
+int video_init(int window_x, int window_y) {
+      printf("Initializing video system.\n");
+      struct fb_var_screeninfo vinfo;
+      struct fb_fix_screeninfo finfo;
+
+      // Open the file for reading and writing
+      fb_handle = open("/dev/fb0", O_RDWR);
+      if (!fb_handle) {
+            printf("Error: cannot open framebuffer device.\n");
+            return(1);
+      }
+      printf("The framebuffer device was opened successfully.\n");
+
+      // Get fixed screen information
+      if (ioctl(fb_handle, FBIOGET_FSCREENINFO, &finfo)) {
+            printf("Error reading fixed information.\n");
+            return(2);
+      }
+
+      // Get variable screen information
+      if (ioctl(fb_handle, FBIOGET_VSCREENINFO, &vinfo)) {
+            printf("Error reading variable information.\n");
+            return(2);
+      }
+      printf("%dx%d, %d bpp\n", vinfo.xres, vinfo.yres,
+             vinfo.bits_per_pixel);
+
+      // map framebuffer to user memory 
+      screensize = finfo.smem_len;
+
+      fb_pixels = (puint8)mmap(0,
+                               screensize,
+                               PROT_READ | PROT_WRITE,
+                               MAP_SHARED,
+                               fb_handle, 0);
+
+      pix_ptr = (intptr_t)fb_pixels;
+      if (pix_ptr == -1) {
+            printf("Failed to mmap.\n");
+            return(3);
+      }
+
+      // correct pixel pointer to offset
+      SCANLINE_LEN = finfo.line_length;
+      BYTES_PER_PIXEL = vinfo.bits_per_pixel / 8;
+      pix_ptr += (vinfo.yres_virtual - window_y - 1) * SCANLINE_LEN + window_x * BYTES_PER_PIXEL;
+
+
+      small_font = new bitmap_font("/home/pi/projects/rpiais/font.bmp");
+
+      CENTER_X = VIEW_WIDTH / 2;
+      CENTER_Y = VIEW_HEIGHT / 2;
+      VIEWBOX_RECT.assign_pos(-CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1);
+      SCREEN_RECT.assign_pos(0, 0, VIEW_WIDTH - 1, VIEW_HEIGHT - 1);
+      return 0;
+}
+void video_close() {
+      munmap(fb_pixels, screensize);
+      close(fb_handle);
+}
+void video_frame_start(const BGRA background) {
       for (int i = 0; i < VIEW_WIDTH * VIEW_HEIGHT - 1; i++)
       {
-       //     pixels[i].integer = background;
+            //     pixels[i].integer = background;
       }
 }
 void video_frame_end() {
       //pix_screen->update(pixels);
 }
 ////////////////////////////////////////////////////////////
-inline void draw_pix(const int x, const int y, const rgba color) {
+inline void draw_pix(const int x, const int y, const BGRA color) {
       if (x < 0) return;
       if (y < 0) return;
       if (x >= VIEW_WIDTH) return;
       if (y >= VIEW_HEIGHT) return;
-      int addr = (VIEW_HEIGHT - y - 1) * VIEW_WIDTH + x;
-      int alpha = (color >> 24) & 0xFF;
-      if (alpha)
-      {
-            float a = alpha / 255.0f, ia = 1 - a;
-            int bg = 0;// pixels[addr].integer;
-            int r0 = (bg >> 16) & 0xFF, g0 = (bg >> 8) & 0xFF, b0 = bg & 0xFF;
-            int r1 = (color >> 16) & 0xFF, g1 = (color >> 8) & 0xFF, b1 = color & 0xFF;
+      puint8 addr = (puint8)(pix_ptr - y * SCANLINE_LEN + x * BYTES_PER_PIXEL);
 
-            //new_color = (alpha) * (foreground_color)+(1 - alpha) * (background_color)
-            r0 = int(r1 * a + r0 * ia);
-            g0 = int(g1 * a + g0 * ia);
-            b0 = int(b1 * a + b0 * ia);
-         //   pixels[addr].integer = (r0 << 16) | (g0 << 8) | b0;
+      int alpha = color & 0xFF;
+      if (alpha == 0) // no transparency, simple put color
+      {
+            switch (BYTES_PER_PIXEL)
+            {
+            case 4:
+                  // int32 x = *((puint32)addr);
+
+                  *((puint32)addr) = color;
+                  //int32 y = *((puint32)addr);
+                  break;
+            }
       }
-      else {
-       //     pixels[addr].integer = color;
+      else if (alpha != 255) {
+            //new_color = (alpha) * (foreground_color)+(1 - alpha) * (background_color)
+            // r0 = int(r1 * a + r0 * ia);
+           // float a = (float)alpha / 255.0f, ia = 1.0f - a;
+            switch (BYTES_PER_PIXEL)
+            {
+            case 4:
+                  /*
+                  *addr = int((float) *addr * a + (float)((color >> 24) & 0xFF) * ia);
+                   addr++;
+                   *addr = int((float)*addr * a + (float)((color >> 16) & 0xFF) * ia);
+                   addr++;
+                   *addr = int((float)*addr * a + (float)((color >> 8) & 0xFF) * ia);
+                   */
+                  break;
+            }
       }
 }
-void draw_line(int x0, int y0, int x1, int y1, const rgba color) {
+void draw_line(int x0, int y0, int x1, int y1, const BGRA color) {
       int w = x1 - x0;
       int h = y1 - y0;
       int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
@@ -111,8 +183,7 @@ void draw_line(int x0, int y0, int x1, int y1, const rgba color) {
             }
       }
 }
-
-void draw_line_fast(int y, int xs, int xe, const rgba color)
+void draw_line_fast(int y, int xs, int xe, const BGRA color)
 /*
 * ONLY HORIZONTAL LINES
 * WITHOUT ALPHA
@@ -128,11 +199,10 @@ void draw_line_fast(int y, int xs, int xe, const rgba color)
       xe += y;
       for (int x = xs; x <= xe; x++)
       {
-       //     pixels[x].integer = color;
+            //     pixels[x].integer = color;
       }
 }
-
-void draw_polyline(int x, int y, const rgba color, int close_polyline = 0)
+void draw_polyline(int x, int y, const BGRA color, int close_polyline = 0)
 {
       static int count = 0;
       static int first_x, first_y;
@@ -162,7 +232,7 @@ void draw_polyline(int x, int y, const rgba color, int close_polyline = 0)
                         count++;
                   }
 }
-void draw_text(bitmap_font * fnt, int x, int y, string s, const rgba color, int flags)
+void draw_text(bitmap_font * fnt, int x, int y, string s, const BGRA color, int flags)
 {
       puint8 data;
       int32 code, char_width, char_height, ty;
@@ -230,10 +300,7 @@ void draw_text(bitmap_font * fnt, int x, int y, string s, const rgba color, int 
       }
 
 }
-
-
-
-void draw_circle(int cx, int cy, int radius, const rgba color)
+void draw_circle(int cx, int cy, int radius, const BGRA color)
 {
       int f = 1 - radius;
       int ddF_x = 0;
@@ -267,7 +334,6 @@ void draw_circle(int cx, int cy, int radius, const rgba color)
             draw_pix(cx - y, cy - x, color);
       }
 }
-
 ////////////////////////////////////////////////////////////
 void edge_tables_reset()
 {
@@ -424,7 +490,7 @@ void calc_fill(const poly * sh) {
 
       }
 }
-void draw_fill(const rgba color)
+void draw_fill(const BGRA color)
 {
       /*if (dbg_flag)
       {
@@ -477,8 +543,12 @@ void draw_fill(const rgba color)
       }
 
 }
-void draw_outline(const poly * sh, const rgba color)
+void draw_outline(const poly * sh, const BGRA color)
 {
+
+#pragma GCC diagnostic push)
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
       intpt * prev_point, * point;
       int path_end, point_id = 0;
       for (int path_id = 0; path_id < sh->path_count; path_id++)
@@ -497,13 +567,13 @@ void draw_outline(const poly * sh, const rgba color)
             draw_polyline(0, 0, color, 1);
 
       }
-
+#pragma GCC diagnostic pop
 
 
 
 }
 ////////////////////////////////////////////////////////////
-void draw_shape(const poly * sh, const rgba fill_color, const rgba outline_color)
+void draw_shape(const poly * sh, const BGRA fill_color, const BGRA outline_color)
 {
       if (fill_color != NO_COLOR)
       {

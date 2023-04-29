@@ -1,0 +1,1 @@
+SELECT	points.* FROM	`mapselect` LEFT JOIN points ON mapselect.recid = points.recid ORDER BY	points.recid ASC,	points.partid ASC,	points.pointid ASC;

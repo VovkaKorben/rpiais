@@ -3,7 +3,6 @@
 #define __MYDEFS_H
 #include <string>
 #include <vector>
-#include <chrono>
 #include<cmath>
 #include <iostream>
 #include <fstream>
@@ -11,12 +10,48 @@
 #include <ostream>
 #include <memory>
 #include <mysql.h>
-//#include <mysql.h>
-using namespace std;
+
+#ifdef __clang__ //clang_compiler
+#elif __GNUC__ //GNU_C_compiler
+
+#define PRAGMA(X) _Pragma(#X)
+#define WARN_OFF(n)     PRAGMA(pragma GCC diagnostic push)\
+PRAGMA(pragma GCC diagnostic ignored n)
+#define WARN_RESTORE       PRAGMA(pragma GCC diagnostic pop)
+
+
+#elif _MSC_VER // MSVC
+#elif __BORLANDC__ //borland 
+#elif __MINGW32__ // mingw 
+#endif
+/*
+#define #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
+
+// Macro to define cursor lines
+#define CURSOR(top, bottom) (((top) << 8) | (bottom))
+
+// Macro to get a random integer with a specified range
+#define getrandom(min, max) \
+    ((rand()%(int)(((max) + 1)-(min)))+ (min))
+
+    */
+
+
+
+
+
+    //#include <mysql.h>
+      using namespace std;
 //#include <mysql/jdbc.h>
 
 //typedef void (*frame_func)();
 
+
+
+const int VIEW_WIDTH = 480;
+const int VIEW_HEIGHT = 320;
 
 
 inline int imin(int v1, int v2)
@@ -29,9 +64,7 @@ inline int imax(int v1, int v2)
 }
 
 
-const int VIEW_WIDTH = 800; const int VIEW_HEIGHT = 600;
-const int CENTER_X = int(VIEW_WIDTH / 2);
-const int CENTER_Y = int(VIEW_HEIGHT / 2);
+
 
 
 #define PI 3.1415926535897932384626433832795
@@ -44,11 +77,17 @@ typedef int8 * pint8;
 typedef unsigned char uint8;
 typedef uint8 * puint8;
 typedef char * pchar;
+
 typedef signed int int32;
 typedef unsigned int uint32;
+typedef unsigned int * puint32;
+typedef signed int * pint32;
+
 typedef unsigned short uint16;
 typedef signed short int16;
-typedef unsigned long rgba;
+
+typedef unsigned int BGRA;
+//typedef unsigned long * argb_ptr;
 using namespace std;
 typedef vector<string> StringArray;
 typedef vector<StringArray> StringArrayBulk;
@@ -58,8 +97,9 @@ inline int isign(double v) { if (v > 0.0)            return 1;      else if (v <
 inline double dsign(double v) { if (v > 0.0)            return 1.0;      else if (v < 0.0)            return -1.0;      else return 0.0; };
 
 inline uint64_t utc_ms() {
-      using namespace std::chrono;
-      return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+      struct timespec t;
+      clock_gettime(CLOCK_REALTIME, &t);
+      return t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 struct  intpt
 {
@@ -122,11 +162,6 @@ struct  floatpt
                   y = log(tan(((90 + y) * PI) / 360)) / (PI / 180);
             y = (y * 20037508.34) / 180;
       }
-      /*inline void print()
-      {
-            cout << x << ", " << y << "\n";
-
-      }*/
       inline void offset_remove(floatpt fp)
       {
             x -= fp.x;
@@ -320,40 +355,5 @@ inline void logtofile(string s, bool c = false) {
 
 
 
-
-inline MYSQL * connect_db(const char * host, const char * user, const char * pwd, const char * db)
-{
-      // Format a MySQL object
-      MYSQL * conn;
-      conn = mysql_init(NULL);
-
-      // Establish a MySQL connection
-      if (!mysql_real_connect(conn, host, user, pwd, db, 3306, NULL, 0)) {
-            cerr << mysql_error(conn) << endl;
-            return nullptr;
-      }
-
-      // Execute a sql statement
-      if (mysql_query(conn, "SHOW TABLES")) {
-            cerr << mysql_error(conn) << endl;
-            return nullptr;
-      }
-      return conn;
-      /*
-      // Get a result set
-      res = mysql_use_result(conn);
-
-      // Fetch a result set
-      cout << "* MySQL - SHOW TABLES in `" << MYSQL_DB << "`" << endl;
-      while ((row = mysql_fetch_row(res)) != NULL)
-            cout << row[0] << endl;
-
-      // Release memories
-      mysql_free_result(res);
-
-      // Close a MySQL connection
-      mysql_close(conn);
-      */
-}
 
 #endif
