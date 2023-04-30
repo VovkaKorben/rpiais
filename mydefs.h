@@ -43,7 +43,7 @@ PRAGMA(pragma GCC diagnostic ignored n)
 
 
     //#include <mysql.h>
-      using namespace std;
+using namespace std;
 //#include <mysql/jdbc.h>
 
 //typedef void (*frame_func)();
@@ -62,6 +62,8 @@ inline int imax(int v1, int v2)
 {
       if (v1 > v2) return v1; else return v2;
 }
+
+
 
 
 
@@ -171,7 +173,14 @@ struct  floatpt
       {
             return { (int)round(x),(int)round(y) };
       }
-
+      inline int ix()
+      {
+            return int(round(x));
+      }
+      inline int iy()
+      {
+            return int(round(y));
+      }
 };
 
 struct irect {
@@ -200,6 +209,11 @@ struct irect {
 
 };
 struct frect {
+
+
+
+#pragma GCC diagnostic push)
+#pragma GCC diagnostic ignored "-Wreturn-type"
       double x1, y1, x2, y2;
       floatpt get_corner(int index)
       {
@@ -210,6 +224,9 @@ struct frect {
             case 3:	return floatpt{ x1,y2 };
             }
       }
+
+#pragma GCC diagnostic pop
+
 };
 
 template<typename ... Args> inline std::string string_format(const std::string & format, Args ... args)

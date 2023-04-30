@@ -7,7 +7,7 @@
 #include "nmea.h"
 
 MYSQL * mconn = NULL;
-MYSQL_STMT * pstmt = NULL;
+std::string sql_nmea, sql_map;
 
 
 
@@ -32,6 +32,18 @@ std::string get_mystr(MYSQL_ROW row, const int index)
       return std::string(buff);
 
 }
+double get_myfloat(MYSQL_ROW row, const int index)
+{
+      if (row[index] == nullptr)
+            return 0;
+      size_t size = strlen(row[index]);
+      char buff[size + 1];
+      memcpy(buff, row[index], size);
+      buff[size] = '\0';
+      return std::stod(buff);
+
+}
+
 
 int load_dicts(MYSQL * conn)
 {
@@ -122,14 +134,31 @@ int load_dicts(MYSQL * conn)
 
 
 }
+/*
+int prepare_stmt(MYSQL * conn, MYSQL_STMT * pstmt, std::string filename)
+{
+      pstmt = mysql_stmt_init(mconn);
+      if (!pstmt)
+      {
+            printf("MySQL error in prepare_stmt: %s.\n", mysql_error(mconn));
+            return 1;
+      }
+      std::string pstmt_str = read_file(filename);
+
+      if (mysql_stmt_prepare(pstmt, pstmt_str.c_str(), pstmt_str.length()))
+      {
+            // sLog.outError("SQL: mysql_stmt_prepare() failed for '%s'", m_szFmt.c_str());
+             //sLog.outError("SQL ERROR: %s", mysql_stmt_error(m_stmt));
+            return 1;
+      }
+      return 0;
+}*/
 
 int init_db(const char * host, const char * user, const char * pwd, const char * db)
 {
-      // Format a MySQL object
+      std::string sq;
       mconn = mysql_init(NULL);
 
-      // pstmt = mysql_con->prepareStatement("select `id`,`data` from `rawdata`  where `id`> ? order by `id`");
-       // Establish a MySQL connection
       if (!mysql_real_connect(mconn, host, user, pwd, db, 3306, NULL, 0)) {
             printf("MySQL error: %s.\n", mysql_error(mconn));
             return 1;
@@ -139,21 +168,37 @@ int init_db(const char * host, const char * user, const char * pwd, const char *
             return 1;
       }
 
-      pstmt = mysql_stmt_init(mconn);
-      if (!pstmt)
+      sql_nmea = read_file("/home/pi/projects/rpiais/sql/nmearead.sql");
+      sql_map = read_file("/home/pi/projects/rpiais/sql/mapread.sql");
+
+      // prepare tables for map load
+      sq = read_file("/home/pi/projects/rpiais/sql/mapread_init.sql");
+      if (mysql_query(mconn, sq.c_str()))
       {
-            printf("MySQL error: %s.\n", mysql_error(mconn));
+            printf("mapread_init Query failed: %s\n", mysql_error(mconn));
             return 1;
       }
-      std::string pstmt_str = read_file("/home/pi/projects/rpiais/sql/mapread.sql");
+      for (; mysql_next_result(mconn) == 0;);// for avoid "out of sync"
 
-      if (mysql_stmt_prepare(pstmt, pstmt_str.c_str(), pstmt_str.length()))
+
+      // read last gps position
+      sq = read_file("/home/pi/projects/rpiais/sql/gpsread.sql");
+      if (mysql_query(mconn, sq.c_str()))
       {
-            // sLog.outError("SQL: mysql_stmt_prepare() failed for '%s'", m_szFmt.c_str());
-             //sLog.outError("SQL ERROR: %s", mysql_stmt_error(m_stmt));
+            printf("gpsread query failed: %s\n", mysql_error(mconn));
             return 1;
       }
 
+      MYSQL_RES * res = mysql_store_result(mconn);
+      if (mysql_num_rows(res) == 1)
+      {
+            MYSQL_ROW   row = mysql_fetch_row(res);
+            double lon = get_myfloat(row, 0), lat = get_myfloat(row, 1);
+            own_vessel.set_pos({lon,lat}, 0);
+      }
+      for (; mysql_next_result(mconn) == 0;);// for avoid "out of sync"
+
+      // load NMEA tables
       if (load_dicts(mconn))
       {
             printf("Error load dicts.\n");

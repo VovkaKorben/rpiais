@@ -103,17 +103,6 @@
     <ClInclude Include="pixfont.h" />
     <ClInclude Include="video.h" />
   </ItemGroup>
-  <ItemGroup>
-    <Image Include="font.bmp">
-      <DeploymentContent>true</DeploymentContent>
-    </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="sql\readdicts.sql">
-      <FileType>Text</FileType>
-      <DeploymentContent>true</DeploymentContent>
-    </None>
-  </ItemGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <AdditionalIncludeDirectories>C:\Program Files\MySQL\MySQL Server 8.0\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -132,6 +121,15 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <ClCompile>
       <AdditionalIncludeDirectories>/usr/include/mariadb;/usr/include/mariadb/mysql;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <LibraryDependencies>mariadb;mysqlclient;%(LibraryDependencies)</LibraryDependencies>
+      <AdditionalLibraryDirectories>/usr/lib/aarch64-linux-gnu/;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>/usr/include/mariadb;/usr/include/mariadb/mysql;%(ClCompile.AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <LibraryDependencies>mariadb;mysqlclient;%(LibraryDependencies)</LibraryDependencies>

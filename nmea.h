@@ -37,16 +37,49 @@ extern map<int, vector<vdm_field> > vdm_defs;
 extern map<int, int> vdm_length;
 extern map<string, FnPtr> lut;
 
-class my_pos
+
+
+struct own_vessel_class
 {
+private:
+      // gps 2
+      // glonass 1
+      // prev pos 0
+      vector<floatpt> pos;
+
+      int pos_priority;
+
 public:
-      void set_gps(floatpt pos, int priority);
-      floatpt get_gps(floatpt pos, int priority);
+
+      bool pos_ok()
+      {
+            return pos_priority >= 0;
+      };
+      void set_pos(floatpt position, int priority)
+      {
+            pos[priority] = position;
+            if (priority > pos_priority)
+                  pos_priority = priority;
+
+      };
+      floatpt get_pos()
+      {
+            return pos[pos_priority];
+      };
+      int heading;
+      bool relative;
+      own_vessel_class()
+      {
+            pos.resize(3);
+            heading = 0;
+            relative = false;
+            pos_priority = -1;
+
+      }
 
 
-
-};
-
+} ;
+extern own_vessel_class own_vessel;
 
 #define NMEA_GOOD 0x0000
 #define NMEA_EMPTY 0x0001

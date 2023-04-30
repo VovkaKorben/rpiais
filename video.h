@@ -31,7 +31,7 @@ const BGRA NO_COLOR = 0xFFFFFFFF;
 int video_init(int window_x, int window_y);
 void video_close();
 //int video_init(frame_func ff);
-void video_frame_start(const BGRA background);
+//void video_frame_start(const BGRA background);
 void video_frame_end();
 void video_loop_start();
 void draw_line(int x1, int y1, int x2, int y2, const BGRA color);
@@ -40,4 +40,5 @@ void draw_line(int x1, int y1, int x2, int y2, const BGRA color);
 void draw_shape(const poly * sh, const BGRA fill_color, const BGRA outline_color);
 void draw_text(bitmap_font * fnt, int x, int y, string s, const BGRA color, int flags = VALIGN_BOTTOM | HALIGN_LEFT);
 void draw_circle(int cx, int cy, int radius, const BGRA color);
+void draw_bg(const BGRA background);
 #endif

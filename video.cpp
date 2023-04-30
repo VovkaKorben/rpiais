@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <stdlib.h>
+#include <malloc.h>
 #include <string.h>
 #include "video.h"
 
@@ -28,22 +29,15 @@ bucketset aet, et[VIEW_HEIGHT];
 bitmap_font * small_font;
 
 int fb_handle = 0, SCANLINE_LEN = 0, BYTES_PER_PIXEL = 0;
-intptr_t pix_ptr; // address to window start
-puint8 fb_pixels; // fb start pointer
-long int  screensize = 0;
+//intptr_t pix_ptr; // address to window start
+//puint8 fb_pixels; // fb start pointer
 
-/*
+long int  fb_size = 0;
+const int FB_COUNT = 2;
+puint8 fb_buff;
+int current_fb;
+intptr_t pix_ptr[FB_COUNT]; void * ptr = NULL;
 
-void video_loop_start() {
-      while (pix_screen.open())
-      {
-            // cout << "video_loop_start\n";
-    //        frame_handler();
-      }
-}
-
-
-}*/
 int video_init(int window_x, int window_y) {
       printf("Initializing video system.\n");
       struct fb_var_screeninfo vinfo;
@@ -51,28 +45,17 @@ int video_init(int window_x, int window_y) {
 
       // Open the file for reading and writing
       fb_handle = open("/dev/fb0", O_RDWR);
-      if (!fb_handle) {
-            printf("Error: cannot open framebuffer device.\n");
-            return(1);
-      }
+      if (!fb_handle) { printf("Error: cannot open framebuffer device.\n");            return(1); }
       printf("The framebuffer device was opened successfully.\n");
+      if (ioctl(fb_handle, FBIOGET_FSCREENINFO, &finfo)) { printf("Error reading fixed information.\n");            return(2); }
+      if (ioctl(fb_handle, FBIOGET_VSCREENINFO, &vinfo)) { printf("Error reading variable information.\n");            return(2); }
+      printf("%dx%d, %d bpp\n", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
+      fb_size = finfo.smem_len;
+      int result = posix_memalign(&fb_buff, 4096, fb_size* FB_COUNT);
 
-      // Get fixed screen information
-      if (ioctl(fb_handle, FBIOGET_FSCREENINFO, &finfo)) {
-            printf("Error reading fixed information.\n");
-            return(2);
-      }
-
-      // Get variable screen information
-      if (ioctl(fb_handle, FBIOGET_VSCREENINFO, &vinfo)) {
-            printf("Error reading variable information.\n");
-            return(2);
-      }
-      printf("%dx%d, %d bpp\n", vinfo.xres, vinfo.yres,
-             vinfo.bits_per_pixel);
 
       // map framebuffer to user memory 
-      screensize = finfo.smem_len;
+      
 
       fb_pixels = (puint8)mmap(0,
                                screensize,
@@ -104,12 +87,12 @@ void video_close() {
       munmap(fb_pixels, screensize);
       close(fb_handle);
 }
-void video_frame_start(const BGRA background) {
+/*void video_frame_start(const BGRA background) {
       for (int i = 0; i < VIEW_WIDTH * VIEW_HEIGHT - 1; i++)
       {
             //     pixels[i].integer = background;
       }
-}
+}*/
 void video_frame_end() {
       //pix_screen->update(pixels);
 }
@@ -332,6 +315,30 @@ void draw_circle(int cx, int cy, int radius, const BGRA color)
             draw_pix(cx - y, cy + x, color);
             draw_pix(cx + y, cy - x, color);
             draw_pix(cx - y, cy - x, color);
+      }
+}
+void draw_bg(const BGRA background)
+{
+      intptr_t addr = pix_ptr;
+
+      switch (BYTES_PER_PIXEL)
+      {
+      case 4: {
+            puint32 ptr;
+            for (int y = 0; y < VIEW_HEIGHT; y++)
+            {
+                  ptr = (puint32)addr;
+                  for (int x = 0; x < VIEW_WIDTH; x++)
+                  {
+                        *ptr = background;
+                        ptr++;
+                  }
+                  addr -= SCANLINE_LEN;
+            }
+            break;
+      }
+      default:
+            break;
       }
 }
 ////////////////////////////////////////////////////////////

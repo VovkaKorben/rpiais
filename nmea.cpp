@@ -7,7 +7,7 @@
 
 #include "nmea.h"
 
-using namespace std;
+//using namespace std;
 
 
 
@@ -62,10 +62,10 @@ struct msg_bulk {
             messages.clear();
       };
 };
-typedef map<string, msg_bulk> groups;
+typedef map<std::string, msg_bulk> groups;
 groups buff;
 
-bool check_buff(string sentence, StringArray data, StringArrayBulk * bulk)
+bool check_buff(std::string sentence, StringArray data, StringArrayBulk * bulk)
 {
 
       int group_id, message_id, message_total;
@@ -120,9 +120,10 @@ bool check_buff(string sentence, StringArray data, StringArrayBulk * bulk)
 }
 
 map<int, satellite> sattelites;
+own_vessel_class own_vessel;
 
 
-bool parse_char(const string & s, char & c)
+bool parse_char(const std::string & s, char & c)
 {
       if (s.length() != 1)
             return false;
@@ -132,7 +133,7 @@ bool parse_char(const string & s, char & c)
             c -= 32;
       return true;
 }
-bool parse_int(const string & s, int & i)
+bool parse_int(const std::string & s, int & i)
 {
       if (s.length() == 0)
             return false;
@@ -146,7 +147,7 @@ bool parse_int(const string & s, int & i)
       return true;
 
 }
-bool parse_double(const string & s, double & f)
+bool parse_double(const std::string & s, double & f)
 {
       if (s.length() == 0)
             return false;
@@ -362,8 +363,8 @@ int _vdm(StringArrayBulk * data)
             if (f.field_name == "MMSI")
             {
                   mmsi = bc.get_int(&f);
-                  //if (mmsi != 0)
-                  v = vessels.get_by_mmsi(mmsi);
+                  if (mmsi != 0)
+                        v = vessels.get_by_mmsi(mmsi);
             }
             else if (v != nullptr)
             {
@@ -446,9 +447,9 @@ int _vdm(StringArrayBulk * data)
       return 0;
 }
 
-map<string, nmea_talker> talkers;
-map<string, nmea_sentence> sentences;
-map<string, FnPtr> lut = {
+map<std::string, nmea_talker> talkers;
+map<std::string, nmea_sentence> sentences;
+map<std::string, FnPtr> lut = {
       {"GGA",_gga},
       {"GSA",_gsa},
       {"RMC",_rmc},
@@ -458,7 +459,7 @@ map<string, FnPtr> lut = {
 };
 
 
-unsigned int parse_nmea(string nmea_str)
+unsigned int parse_nmea(std::string nmea_str)
 {
       unsigned int r = NMEA_GOOD;
       if (nmea_str.length() == 0)
@@ -528,43 +529,7 @@ unsigned int parse_nmea(string nmea_str)
 
       return r;
 }
-/*
-ostream& operator<<(ostream& os, const StringArray& strarr) { for (string s : strarr) os << s << "_"; return os; }
-void print_buff()
-{
-      cout << "----------------------------------------" <<
-            "Buff dump:" <<
-            "----------------------------------------" << endl;
-      for (auto const& x : buff)
-      {
-            cout << x.first << endl;
-            auto g = x.second;
-            cout << string_format("\tCount: %d, exists: %d", g.total, g.messages.size()) << endl;
-            for (auto const& y : g.messages)
-            {
-                  cout << string_format("\t%d: ", y.first) << y.second << endl;
-                  //auto g = x.second;
 
-                  //std::cout << x.first << ':' << x.second << std::endl;
-            }
-            //std::cout << x.first << ':' << x.second << std::endl;
-      }
-      cout << "----------------------------------------" << endl;
-}
-
-void print_data(StringArrayBulk* data)
-{
-      for (StringArray sa : *data)
-      {
-            for (string s : sa)
-            {
-                  cout << s << "|";
-
-            }
-            cout << "\n";
-      }
-}
-*/
 
 #define bitcollector_buff_len 150
 #define bitcollector_buff_bits bitcollector_buff_len*8
@@ -611,7 +576,7 @@ void bitcollector::add_bits(uint32 data, int32 data_len)
             length++;
       }
 }
-void bitcollector::add_string(string data, size_t str_len)
+void bitcollector::add_string(std::string data, size_t str_len)
 {
       int ch;
       for (size_t i = 0; i < data.length(); i++)
@@ -668,10 +633,10 @@ double bitcollector::get_double(const vdm_field * f)
             r /= (double)(f->exp);
       return r;
 }
-string bitcollector::get_string(const vdm_field * f)
+std::string bitcollector::get_string(const vdm_field * f)
 {
 
-      string r = "";
+      std::string r = "";
       int start = f->start, len = f->len, raw;
       while (len--)
       {
@@ -683,7 +648,7 @@ string bitcollector::get_string(const vdm_field * f)
 
       return r;
 }
-void bitcollector::add_vdm_str(string data, int pad)
+void bitcollector::add_vdm_str(std::string data, int pad)
 {
       uint32 code;
       for (auto & ch : data)
@@ -732,7 +697,7 @@ StringArray bitcollector::create_vdm(int & group_id)
             }
       }
 
-      string group_str = messages_count > 1 ? string_format("%d", group_id) : "";
+      std::string group_str = messages_count > 1 ? string_format("%d", group_id) : "";
       uint8 cs;
       int pad;
       for (current_msg = 0; current_msg < messages_count; current_msg++)
