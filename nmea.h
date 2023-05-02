@@ -45,32 +45,36 @@ private:
       // gps 2
       // glonass 1
       // prev pos 0
-      vector<floatpt> pos;
+      vector<floatpt> pos_arr;
 
       int pos_priority;
+      void eval_pos() {
+            pos = pos_arr[pos_priority];
+            pos.latlon2meter();
 
+      }
 public:
-
+      floatpt pos;
       bool pos_ok()
       {
             return pos_priority >= 0;
       };
       void set_pos(floatpt position, int priority)
       {
-            pos[priority] = position;
-            if (priority > pos_priority)
+            pos_arr[priority] = position;
+            if (priority >= pos_priority)
+            {
                   pos_priority = priority;
+                  eval_pos();
+            }
 
       };
-      floatpt get_pos()
-      {
-            return pos[pos_priority];
-      };
+
       int heading;
       bool relative;
       own_vessel_class()
       {
-            pos.resize(3);
+            pos_arr.resize(3);
             heading = 0;
             relative = false;
             pos_priority = -1;
@@ -78,7 +82,7 @@ public:
       }
 
 
-} ;
+};
 extern own_vessel_class own_vessel;
 
 #define NMEA_GOOD 0x0000

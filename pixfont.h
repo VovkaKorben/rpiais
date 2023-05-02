@@ -35,6 +35,7 @@ pix data stored sequentally left to right, from top to bottom
             return c;
 
       }
+      bitmap_font() {};
       bitmap_font(const char * filename);
       ~bitmap_font() {
             delete[] pixdata;

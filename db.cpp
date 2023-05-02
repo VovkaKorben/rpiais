@@ -6,12 +6,113 @@
 #include "mydefs.h"
 #include "nmea.h"
 
-MYSQL * mconn = NULL;
-std::string sql_nmea, sql_map;
 
 
+std::string read_text(std::string filename)
+{
+      ifstream f(filename, std::ifstream::binary);
+      if (!f) return "";
+      std::stringstream buffer;
+      buffer << f.rdbuf();
+      return buffer.str();
+}
+bool mysql_driver::exec_file(std::string filename) {
 
-int get_myint(MYSQL_ROW row, const int index)
+
+      std::string query = read_text(filename);
+      if (query.empty()) return false;
+      exec(query);
+
+}
+bool mysql_driver::exec(std::string query) {
+      if (!connection) return false;
+
+      if (mysql_query(connection, query.c_str()))
+      {
+            last_error_str = mysql_error(connection);
+            return false;
+      }
+      return true;
+
+}
+bool  mysql_driver::store()
+{
+      res = mysql_store_result(connection);
+      if (!res)
+      {
+            last_error_str = mysql_error(connection);
+            return false;
+      }
+
+      unsigned int num_fields = mysql_num_fields(res);
+      MYSQL_FIELD * field;
+
+      fields.clear();
+      fields.reserve(num_fields);
+      for (unsigned int i = 0; i < num_fields; i++) {
+            field = mysql_fetch_field(res);
+            fields.push_back(field->name);
+      }
+
+      return true;
+}
+bool  mysql_driver::has_next() {
+      if (!connection) return false;
+      int status = mysql_next_result(connection);
+      return status == 0;
+}
+bool mysql_driver::fetch() {
+      row = mysql_fetch_row(res);
+      return (row != NULL);
+
+}
+void mysql_driver::free_result() {
+      mysql_free_result(res);
+}
+int mysql_driver::row_count() {
+      return mysql_num_rows(res);
+}
+bool mysql_driver::prepare(const int index, const char * filename) {
+      std::string query = read_text(filename);
+      if (query.empty()) return false;
+      //
+      if (pstmt.count(index)!=0)  return false;
+      //std::map<int, MYSQL_STMT *> pstmt;
+      MYSQL_STMT * ps = mysql_stmt_init(connection);
+}
+
+
+mysql_driver::mysql_driver(const char * host, const char * user, const char * pwd, const char * db) {
+
+      last_error_str = NULL;
+      MYSQL * xx = mysql_init(NULL);
+      connection = xx;
+
+      if (!mysql_real_connect(connection, host, user, pwd, db, 3306, NULL, 0))
+      {
+            last_error_str = mysql_error(connection);
+            return;
+      }
+      if (mysql_set_server_option(connection, MYSQL_OPTION_MULTI_STATEMENTS_ON)) {
+            last_error_str = mysql_error(connection);
+            return;
+      }
+
+}
+mysql_driver::~mysql_driver() {
+      mysql_close(connection);
+}
+int mysql_driver::field_index(const std::string field_name)
+{
+      auto it = find(fields.begin(), fields.end(), field_name);
+
+      // If element was found
+      if (it == fields.end())
+            return -1;
+
+      return it - fields.begin();
+}
+int mysql_driver::get_myint(const int index)
 {
       if (row[index] == nullptr)
             return 0;
@@ -22,7 +123,14 @@ int get_myint(MYSQL_ROW row, const int index)
       return atoi(buff);
 
 }
-std::string get_mystr(MYSQL_ROW row, const int index)
+int mysql_driver::get_myint(const std::string field_name)
+{
+      int index = field_index(field_name);
+      if (index == -1)
+            throw std::runtime_error("field not found: " + field_name);
+      return get_myint(index);
+}
+std::string mysql_driver::get_mystr(const int index)
 {
 
       size_t size = strlen(row[index]);
@@ -32,7 +140,14 @@ std::string get_mystr(MYSQL_ROW row, const int index)
       return std::string(buff);
 
 }
-double get_myfloat(MYSQL_ROW row, const int index)
+std::string mysql_driver::get_mystr(const std::string field_name)
+{
+      int index = field_index(field_name);
+      if (index == -1)
+            throw std::runtime_error("field not found: " + field_name);
+      return get_mystr(index);
+}
+double mysql_driver::get_myfloat(const int index)
 {
       if (row[index] == nullptr)
             return 0;
@@ -43,80 +158,75 @@ double get_myfloat(MYSQL_ROW row, const int index)
       return std::stod(buff);
 
 }
-
-
-int load_dicts(MYSQL * conn)
+double mysql_driver::get_myfloat(const std::string field_name)
 {
-      MYSQL_RES * res;
-      MYSQL_ROW row;
+      int index = field_index(field_name);
+      if (index == -1)
+            throw std::runtime_error("field not found: " + field_name);
+      return get_myfloat(index);
+}
+
+bool load_dicts(mysql_driver * driver)
+{
+
       int status;
       //      unsigned long * length;
       std::string sq, nmea;
 
       // load sentences 
-      sq = read_file("/home/pi/projects/rpiais/sql/readdicts.sql");
+
       sentences.clear();
-      if (mysql_query(conn, sq.c_str()))
-      {
-            printf("Query failed: %s\n", mysql_error(conn));
-            return 1;
-      }
+      driver->exec_file("/home/pi/projects/rpiais/sql/readdicts.sql");
 
       int dict_index = 0;
       do {
-            res = mysql_store_result(conn);
-            if (!res)
-            {
-                  printf("mysql_store_result failed: %s\n", mysql_error(conn));
-                  return 1;
-            }
+            if (!driver->store())
+                  return false;
 
-            //unsigned int num_fields = mysql_num_fields(res);
 
-            while ((row = mysql_fetch_row(res))) {
-                  //length = mysql_fetch_lengths(res);
+            while (driver->fetch()) {
                   switch (dict_index) {
                   case 0: {
-                        std::string  str_id = get_mystr(row, 0);
+                        std::string  str_id = driver->get_mystr("id");
                         std::transform(str_id.begin(), str_id.end(), str_id.begin(), ::toupper);
                         if (lut.count(str_id) == 0)
                               throw std::runtime_error("no handler for " + str_id);
                         sentences.insert({ str_id, {
-                                    get_mystr(row, 1),
-                                    get_myint(row, 2),
+                                    driver->get_mystr("description"),
+                                    driver->get_myint("grouped"),
                                     lut[str_id]
                                     } });
                         break;
                   }
                   case 1: // load talkers
                   {
-                        std::string str_id = get_mystr(row, 0);
+                        std::string str_id = driver->get_mystr("id");
                         talkers.insert({ str_id, {
-                              get_mystr(row, 1),
-                              get_myint(row,2),
+                              driver->get_mystr("description"),
+                              driver->get_myint("obsolete"),
                               } });
                         break;
                   }
                   case 2: {
-                        vdm_length[get_myint(row, 0)] = get_myint(row, 1);
+                        vdm_length[driver->get_myint("id")] = driver->get_myint("len");
                         break;
                   }
                   case 3: {
                         //int xx = get_myint(row, 5);
 
-                        int msg_id = get_myint(row, 0);
+                        int msg_id = driver->get_myint("msg_id");
                         if (vdm_defs.count(msg_id) == 0)
                               vdm_defs[msg_id] = {};
 
-                        std::string fieldname = get_mystr(row, 3); // `ref` value
+                        std::string fieldname = driver->get_mystr("ref"); // `ref` value
                         std::transform(fieldname.begin(), fieldname.end(), fieldname.begin(), ::toupper);
                         vdm_defs[msg_id].push_back({
-                              get_myint(row, 1),// start
-                              get_myint(row, 2),// len
+                              driver->get_myint("start"),// start
+                              driver->get_myint("len"),// len
                               fieldname,
-                              get_myint(row, 4),// type
-                              get_myint(row, 5),// def
-                              get_myint(row, 6),// exp
+                              driver->get_myint("type"),// type
+                              driver->get_myint("def"),// def
+                              driver->get_myint("exp"),// exp
                                                    });
                         break;
                   }
@@ -124,82 +234,46 @@ int load_dicts(MYSQL * conn)
                   }
                   putchar('\n');
             }
-            mysql_free_result(res);
+            driver->free_result();
+
             dict_index++;
-            status = mysql_next_result(conn);
-      } while (status == 0);
+
+      } while (driver->has_next());
 
 
-      return 0;
+      return true;
 
 
 }
-/*
-int prepare_stmt(MYSQL * conn, MYSQL_STMT * pstmt, std::string filename)
-{
-      pstmt = mysql_stmt_init(mconn);
-      if (!pstmt)
-      {
-            printf("MySQL error in prepare_stmt: %s.\n", mysql_error(mconn));
-            return 1;
-      }
-      std::string pstmt_str = read_file(filename);
-
-      if (mysql_stmt_prepare(pstmt, pstmt_str.c_str(), pstmt_str.length()))
-      {
-            // sLog.outError("SQL: mysql_stmt_prepare() failed for '%s'", m_szFmt.c_str());
-             //sLog.outError("SQL ERROR: %s", mysql_stmt_error(m_stmt));
-            return 1;
-      }
-      return 0;
-}*/
-
-int init_db(const char * host, const char * user, const char * pwd, const char * db)
+int init_db(mysql_driver * driver)
 {
       std::string sq;
-      mconn = mysql_init(NULL);
 
-      if (!mysql_real_connect(mconn, host, user, pwd, db, 3306, NULL, 0)) {
-            printf("MySQL error: %s.\n", mysql_error(mconn));
-            return 1;
-      }
-      if (mysql_set_server_option(mconn, MYSQL_OPTION_MULTI_STATEMENTS_ON)) {
-            printf("Setting Multi-Statement Option failed: %s\n", mysql_error(mconn));
-            return 1;
-      }
+      driver->prepare(PREPARED_NMEA, "/home/pi/projects/rpiais/sql/nmearead.sql");
+      driver->prepare(PREPARED_MAP, "/home/pi/projects/rpiais/sql/mapread.sql");
 
-      sql_nmea = read_file("/home/pi/projects/rpiais/sql/nmearead.sql");
-      sql_map = read_file("/home/pi/projects/rpiais/sql/mapread.sql");
-
-      // prepare tables for map load
-      sq = read_file("/home/pi/projects/rpiais/sql/mapread_init.sql");
-      if (mysql_query(mconn, sq.c_str()))
-      {
-            printf("mapread_init Query failed: %s\n", mysql_error(mconn));
-            return 1;
-      }
-      for (; mysql_next_result(mconn) == 0;);// for avoid "out of sync"
-
+      driver->exec_file("/home/pi/projects/rpiais/sql/mapread_init.sql");
+      driver->has_next();
 
       // read last gps position
-      sq = read_file("/home/pi/projects/rpiais/sql/gpsread.sql");
-      if (mysql_query(mconn, sq.c_str()))
-      {
-            printf("gpsread query failed: %s\n", mysql_error(mconn));
-            return 1;
-      }
+      driver->exec_file("/home/pi/projects/rpiais/sql/gpsread.sql");
+      driver->store();
 
-      MYSQL_RES * res = mysql_store_result(mconn);
-      if (mysql_num_rows(res) == 1)
+      sq = read_file("/home/pi/projects/rpiais/sql/gpsread.sql");
+      if (driver->row_count() == 1)
       {
-            MYSQL_ROW   row = mysql_fetch_row(res);
-            double lon = get_myfloat(row, 0), lat = get_myfloat(row, 1);
-            own_vessel.set_pos({lon,lat}, 0);
+            driver->fetch();
+
+            own_vessel.set_pos({
+                  driver->get_myfloat("lon"),
+                  driver->get_myfloat("lat")
+                               }, 0);
       }
-      for (; mysql_next_result(mconn) == 0;);// for avoid "out of sync"
+      driver->has_next();
+
 
       // load NMEA tables
-      if (load_dicts(mconn))
+      if (load_dicts(driver))
       {
             printf("Error load dicts.\n");
             return 1;

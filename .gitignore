@@ -364,3 +364,5 @@ FodyWeavers.xsd
 /sql/nc2
 /sql/nc
 /.gitignore
+/rpiais.vcxproj
+/.gitignore
