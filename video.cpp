@@ -51,7 +51,7 @@ void _insertionSort(bucketset * b) {
 void video_driver::flip()
 {
 
-      vinfo.yoffset = VIEW_HEIGHT * current_fb;
+      vinfo.yoffset = height * current_fb;
       //vinfo.activate = FB_ACTIVATE_VBL;
       if (ioctl(fbdev, FBIOPAN_DISPLAY, &vinfo)) { last_error = FB_PAN_DISPLAY_FAILED; return; }
       current_fb = (current_fb + 1) % buffer_count;
@@ -59,6 +59,8 @@ void video_driver::flip()
       last_error = FB_NO_ERROR;
 }
 video_driver::video_driver(int _width, int _height, int _bpp, int _buffer_count) {
+
+
       fb_fix_screeninfo finfo;
       width = _width, height = _height, buffer_count = _buffer_count;
       bpp = _bpp, bytes_per_pix = _bpp >> 3;
@@ -68,10 +70,10 @@ video_driver::video_driver(int _width, int _height, int _bpp, int _buffer_count)
 
       if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) { last_error = FB_GET_VSCREENINFO_FAILED; return; }
       // fill new values
-      vinfo.xres = VIEW_WIDTH; // try a smaller resolution
-      vinfo.yres = VIEW_HEIGHT;
-      vinfo.xres_virtual = VIEW_WIDTH;
-      vinfo.yres_virtual = VIEW_HEIGHT * buffer_count; // double the physical
+      vinfo.xres = width; // try a smaller resolution
+      vinfo.yres = height;
+      vinfo.xres_virtual = width;
+      vinfo.yres_virtual = height * buffer_count; // double the physical
       vinfo.bits_per_pixel = bpp;
       if (ioctl(fbdev, FBIOPUT_VSCREENINFO, &vinfo)) {
             printf("Error setting variable information.\n");
@@ -91,14 +93,17 @@ video_driver::video_driver(int _width, int _height, int _bpp, int _buffer_count)
       fb_current = fb_start;
 
 
-      CENTER_X = VIEW_WIDTH / 2;
-      CENTER_Y = VIEW_HEIGHT / 2;
+      CENTER_X = width / 4;
+      CENTER_Y = height / 2;
       VIEWBOX_RECT.assign_pos(-CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1);
-      SCREEN_RECT.assign_pos(0, 0, VIEW_WIDTH - 1, VIEW_HEIGHT - 1);
+      SCREEN_RECT.assign_pos(0, 0, width - 1, height - 1);
+
+      et = new bucketset[height];
 
       last_error = FB_NO_ERROR;
 }
 video_driver::~video_driver() {
+      delete[]et;
       munmap(fb_start, fb_size);
       close(fbdev);
 }
@@ -107,10 +112,10 @@ video_driver::~video_driver() {
 inline void video_driver::draw_pix(const int x, const int y, const BGRA color) {
       if (x < 0) return;
       if (y < 0) return;
-      if (x >= VIEW_WIDTH) return;
-      if (y >= VIEW_HEIGHT) return;
+      if (x >= width) return;
+      if (y >= height) return;
       //puint8 addr = (puint8)(pix_ptr - y * SCANLINE_LEN + x * BYTES_PER_PIXEL);
-      puint32 addr = fb_current + x + (VIEW_HEIGHT - y - 1) * VIEW_WIDTH;
+      puint32 addr = fb_current + x + (height - y - 1) * width;
       int alpha = color & 0xFF;
       if (alpha == 0) // no transparency, simple put color
       {
@@ -172,18 +177,18 @@ void video_driver::draw_line_fast(int y, int xs, int xe, const BGRA color)
 * WITHOUT ALPHA
 */
 {
-      if (xe < 0) return;
-      if (xs >= VIEW_WIDTH) return;
+      // check line (or part) lies in window
+      if (xe < 0 || xs >= width) return;
 
+      // clip start & end to window bounds
       if (xs < 0) xs = 0;
-      if (xe >= VIEW_WIDTH) xe = VIEW_WIDTH - 1;
-      y = (VIEW_HEIGHT - y - 1) * VIEW_WIDTH;
-      xs += y;
-      xe += y;
-      for (int x = xs; x <= xe; x++)
-      {
-            //     pixels[x].integer = color;
-      }
+      if (xe >= width) xe = width - 1;
+
+      puint32 addr = fb_current + (height - y - 1) * width + xs;
+      xe -= xs;
+
+      while (xe--)
+            *(addr++) = color;
 }
 void video_driver::draw_polyline(int x, int y, const BGRA color, int close_polyline)
 {
@@ -209,6 +214,7 @@ void video_driver::draw_polyline(int x, int y, const BGRA color, int close_polyl
             else
                   if (prev_x != x || prev_y != y)
                   {
+                        //printf("%d,%d -> %d,%d\n", prev_x, prev_y, x, y );
                         draw_line(prev_x, prev_y, x, y, color);
                         prev_x = x;
                         prev_y = y;
@@ -234,35 +240,16 @@ void video_driver::draw_text(int font_index, int x, int y, string s, const BGRA 
       }
       overall_width += overall_count - 1;
 
-      if ((flags & HALIGN_LEFT) == HALIGN_LEFT)
-      {
-      }
-      else if ((flags & HALIGN_CENTER) == HALIGN_CENTER)
-      {
-            x -= overall_width / 2;
-      }
-      else if ((flags & HALIGN_RIGHT) == HALIGN_RIGHT)
-      {
-            x -= overall_width;
-      }
+      if ((flags & HALIGN_CENTER) == HALIGN_CENTER)            x -= overall_width / 2;
+      else if ((flags & HALIGN_RIGHT) == HALIGN_RIGHT)            x -= overall_width;
 
-      if ((flags & VALIGN_TOP) == VALIGN_TOP)
-      {
-
-      }
-      else   if ((flags & VALIGN_CENTER) == VALIGN_CENTER)
-      {
-            y += fonts[font_index].height / 2;
-      }
-      else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)
-      {
-            y += fonts[font_index].height;
-      }
+      if ((flags & VALIGN_CENTER) == VALIGN_CENTER)            y += fonts[font_index].height / 2;
+      else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)            y += fonts[font_index].height;
 
 
       //y += fnt->height;
       for (char & c : s) {
-            if (x >= VIEW_WIDTH)
+            if (x >= width)
                   break;
             code = fonts[font_index].get_char(c);
             if (code == -1)
@@ -330,7 +317,7 @@ void video_driver::draw_bg(const BGRA background)
 void video_driver::edge_tables_reset()
 {
       aet.cnt = 0;
-      for (int i = 0; i < VIEW_HEIGHT; i++)
+      for (int i = 0; i < height; i++)
             et[i].cnt = 0;
 }
 
@@ -358,7 +345,7 @@ void video_driver::edge_store_table(intpt pt1, intpt pt2) {
       double dx, dy, slope;
 
       // if both points lies below or above viewable rect - edge skipped
-      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= VIEW_HEIGHT and pt2.y >= VIEW_HEIGHT))
+      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= height and pt2.y >= height))
             return;
       dy = pt1.y - pt2.y;
 
@@ -468,7 +455,7 @@ void video_driver::draw_fill(const BGRA color)
       }*/
 
 
-      for (int scanline_no = 0; scanline_no < VIEW_HEIGHT; scanline_no++)
+      for (int scanline_no = 0; scanline_no < height; scanline_no++)
       {
             /*if (dbg_flag && scanline_no >= 156 && scanline_no <= 158)
             {
@@ -529,7 +516,7 @@ void video_driver::draw_outline(const poly * sh, const BGRA color)
 
                   point = &sh->work[point_id];
                   draw_polyline(point->x, point->y, color, 0);
-                 // prev_point = point;
+                  // prev_point = point;
                   point_id++;
             }
 
@@ -561,6 +548,6 @@ bool video_driver::load_font(const int index, const char * filename)
       fonts.emplace(std::piecewise_construct,
                     std::forward_as_tuple(index),
                     std::forward_as_tuple(filename));
-                    
+
       return true;
 }

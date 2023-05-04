@@ -17,8 +17,8 @@ uint64_t next_map_update;
 #endif
 
 int min_fit, circle_radius;
-int last_msg_id = 111203 - 1;
-map <int, myshape>  shapes;
+int last_msg_id = 1;// 111203 - 1;
+map <int, poly>  shapes;
 
 //using namespace std;
 video_driver * screen;
@@ -26,21 +26,21 @@ mysql_driver * mysql;
 
 
 const int max_zoom_index = 9;
-const int ZOOM_RANGE[max_zoom_index] = { 50, 100, 200, 500, 1000, 2000, 3000, 5000,10000 };
-int zoom_index = 4;
+const int ZOOM_RANGE[max_zoom_index] = { 50, 100, 200,300, 1000, 2000, 3000, 5000,10000 };
+int zoom_index = 2;
 double  zoom;
-int update_nmea(int last_msg_id) {
+int update_nmea(int msg_id) {
       int nmea_result;
-      mysql->exec_prepared(PREPARED_NMEA, last_msg_id);
+      mysql->exec_prepared(PREPARED_NMEA, msg_id);
       mysql->store();
       while (mysql->fetch())
       {
-            last_msg_id = mysql->get_myint("id");
+            msg_id = mysql->get_myint("id");
             nmea_result = parse_nmea(mysql->get_mystr("data"));
             if (nmea_result)
                   printf("parse_nmea returns %d\n", nmea_result);
       }
-      return last_msg_id;
+      return msg_id;
 }
 void zoom_changed(int new_zoom_index)
 {
@@ -67,7 +67,7 @@ intpt transform_point(floatpt pt)
       //y = invertYaxis ? CENTER_Y - y - 1 : y + CENTER_Y;
       return intpt{ x,y };
 }
-irect rotate_shape_box(myshape * shape)
+irect rotate_shape_box(poly * shape)
 {
       irect rct;
       floatpt fpt;
@@ -94,7 +94,7 @@ irect rotate_shape_box(myshape * shape)
 
       return rct;
 }
-irect rotate_shape(myshape * shape)
+irect rotate_shape(poly * shape)
 {
       irect rct;
       int first = 1;
@@ -124,8 +124,7 @@ irect rotate_shape(myshape * shape)
 int load_shapes()
 {
 
-      MYSQL_RES * res;
-      MYSQL_ROW row;
+      //MYSQL_RES * res;      MYSQL_ROW row;
 
 
       //double overlap_coeff = 1.05 * ZOOM_RANGE[max_zoom_index - 1];
@@ -133,102 +132,110 @@ int load_shapes()
       int shapes_total = 0, points_total = 0;
 
       // create string with existing id's
-      stringstream sid;
+      stringstream sstr;
+
       if (shapes.size()) {
             int total = 0;
-            sid << " and recid not in(";
-            for (std::map<int, myshape>::iterator iter = shapes.begin(); iter != shapes.end(); ++iter)
+            sstr << " and recid not in(";
+            for (std::map<int, poly>::iterator iter = shapes.begin(); iter != shapes.end(); ++iter)
             {
-                  if (total != 0)
-                        sid << ",";
-                  sid << iter->first;
-                  total++;
-            }
-            sid << ")";
-      }
+                  if (total++ != 0)
+                        sstr << ",";
+                  sstr << iter->first;
 
-      mysql->exec_prepared(PREPARED_MAP,
-                                     own_vessel.pos.x + VIEWBOX_RECT.x1 * overlap_coeff,
-                                     own_vessel.pos.y + VIEWBOX_RECT.y1 * overlap_coeff,
-                                     own_vessel.pos.x + VIEWBOX_RECT.x2 * overlap_coeff,
-                                     own_vessel.pos.y + VIEWBOX_RECT.y2 * overlap_coeff,
-                                     sid.str());
+            }
+            sstr << ")";
+
+            //  sstr.seekg(0, ios::end);            int size = sstr.tellg();
+
+      }
+      const std::string & tmp = sstr.str();
+      const char * cstr = tmp.c_str();
+
+      mysql->exec_prepared(PREPARED_MAP1,
+                           own_vessel.pos.x + VIEWBOX_RECT.x1 * overlap_coeff,
+                           own_vessel.pos.y + VIEWBOX_RECT.y1 * overlap_coeff,
+                           own_vessel.pos.x + VIEWBOX_RECT.x2 * overlap_coeff,
+                           own_vessel.pos.y + VIEWBOX_RECT.y2 * overlap_coeff,
+                           cstr);
+      mysql->free_result();
+      while (mysql->has_next());
+
+      mysql->exec_prepared(PREPARED_MAP2);
       mysql->store();
-  
-
       // fetching shapes
-      myshape shape;
-      while (mysql->fetch()) {
+      poly shape;
+      int recid;
+      while (mysql->fetch())
+      {
 
+
+            shape.bounds.x1 = mysql->get_myfloat("minx");
+            shape.bounds.y1 = mysql->get_myfloat("miny");
+            shape.bounds.x2 = mysql->get_myfloat("maxx");
+            shape.bounds.y2 = mysql->get_myfloat("maxy");
+
+
+            shape.path_count = mysql->get_myint("parts");
+            shape.pathindex = new int[shape.path_count + 1];
+            shape.points_count = mysql->get_myint("points");
+            shape.pathindex[shape.path_count] = shape.points_count; // set closing point
+            shape.origin = new floatpt[shape.points_count];
+            shape.work = new intpt[shape.points_count];
+
+            recid = mysql->get_myint("recid");
+            shapes[recid] = shape;
+
+            shapes_total++;
+      }
+
+      mysql->free_result();
+      if (!mysql->has_next())
+            return 1;
+      mysql->store();
+
+      // read points
+      int prev_recid = -1;
+      int partid, prev_partid;
+      int curr_path_index, curr_point_index;
+
+      //poly * sh = nullptr;
+      while (mysql->fetch())
+      {
+
+            recid = mysql->get_myint("recid");
+            if (recid != prev_recid)
             {
-
-                  shape.id = mysql->get_myint("");
-                  /*  shape.bounds.x1 = res->getDouble("minx");
-                    shape.bounds.y1 = res->getDouble("miny");
-                    shape.bounds.x2 = res->getDouble("maxx");
-                    shape.bounds.y2 = res->getDouble("maxy");
-
-
-                    shape.path_count = res->getInt("parts");
-                    shape.pathindex = new int[shape.path_count + 1];
-                    shape.points_count = res->getInt("points");
-                    shape.pathindex[shape.path_count] = shape.points_count; // set closing point
-                    shape.origin = new floatpt[shape.points_count];
-                    shape.work = new intpt[shape.points_count];
-                    shapes.push_back(shape);
-                    */
-                  shapes_total++;
+                  prev_recid = recid;
+                  //sh = &shapes[recid];
+                  prev_partid = -1;
+                  curr_point_index = 0;
+                  curr_path_index = 0;
             }
 
-            // read points
-            int new_recid, prev_recid = -1;
-            int new_partid, prev_partid = -1;
-            int curr_path_index = -1, curr_point_index = -1;
-            /*
-                        myshape * sh = nullptr;
-                        sq = read_file("C:\\ais\\cpp\\AIS\\sql\\mapread_prepareid3.sql");
-                        res = stmt->executeQuery(sq);
-                        while (res->next())
-                        {
+            partid = mysql->get_myint("partid");
+            if (partid != prev_partid)
+            {
+                  // add path start
+                  prev_partid = partid;
+                  shapes[recid].pathindex[curr_path_index++] = curr_point_index;
+            }
+            shapes[recid].origin[curr_point_index++] = {
+                  mysql->get_myfloat("x"),
+                  mysql->get_myfloat("y")
+            };
 
-                              new_recid = res->getInt("recid");
-                              if (new_recid != prev_recid)
-                              {
-                                    prev_recid = new_recid;
-                                    sh = get_shape_by_id(new_recid);
-                                    if (sh == NULL)
-                                          throw exception("Invalid shape pointer");
-                                    prev_partid = -1;
-                                    curr_point_index = 0;
-                                    curr_path_index = 0;
-                              }
-
-                              new_partid = res->getInt("partid");
-                              if (new_partid != prev_partid)
-                              {
-                                    prev_partid = new_partid;
-                                    sh->pathindex[curr_path_index] = curr_point_index;
-                                    curr_path_index++;
-                              }
-
-                              sh->origin[curr_point_index] = {
-                                    (double)(res->getDouble("x")),
-                                    (double)(res->getDouble("y"))
-                              };
-                              curr_point_index++;
-                              points_total++;
-                        }
-
-
-
-                        delete stmt;
-                        delete res;
-                        */
-            cout << "Shapes loaded: " << shapes_total << endl;
-            cout << "Points added: " << points_total << endl;
+            points_total++;
       }
+
+      mysql->free_result();
+      mysql->has_next();
+
+      cout << "Shapes loaded: " << shapes_total << endl;
+      cout << "Points added: " << points_total << endl;
+      return 0;
 }
-uint64_t  update_map_data( uint64_t next_check)
+uint64_t  update_map_data(uint64_t next_check)
 {
       uint64_t ms = utc_ms();
       if (ms > next_check)
@@ -250,16 +257,20 @@ uint64_t  update_map_data( uint64_t next_check)
 void draw_vessels(const BGRA fill_color, const BGRA outline_color)
 {
       irect test_box;
-      vessel * v;
+      const vessel * v;
       floatpt vessel_center, fp;
       intpt int_center;
-      for (size_t i = 0; i < vessels.items.size(); i++)
+      for (const auto & vx : vessels)
       {
-            v = &vessels.items[i];
+            //printf("lat lon: %.12f,%.12f\n", v.lat, v.lon);
+           // printf("mmsi lat lon: %d %.12f,%.12f\n",v.first,  v.lat, v.lon);
+            v = &vx.second;
             if ((v->flags & VESSEL_XY) == VESSEL_XY)
             {
+                  
                   // calculate vessel center (with zoom and rotation)
-                  vessel_center = { v->lon,v->lat };
+                  
+                  vessel_center = { v.lon,v.lat };
                   vessel_center.latlon2meter();
                   vessel_center.offset_remove(own_vessel.pos);
                   vessel_center.to_polar();
@@ -271,32 +282,32 @@ void draw_vessels(const BGRA fill_color, const BGRA outline_color)
                   int_center.offset_add(CENTER_X, CENTER_Y);
 
                   // rotate each point
-                  for (int p = 0; p < v->points_count; p++)
+                  for (int p = 0; p < v.points_count; p++)
                   {
-                        fp = v->origin[p];
+                        fp = v.origin[p];
                         fp.to_polar();
                         fp.y *= zoom;
 
                         // only if size and angle known - rotate
-                        if ((v->flags & VESSEL_LRTBA) == VESSEL_LRTBA)
+                        if ((v.flags & VESSEL_LRTBA) == VESSEL_LRTBA)
                         {
-                              fp.x -= v->course;
+                              fp.x -= v.course;
                               if (own_vessel.relative)
                                     fp.x -= own_vessel.heading;
                         }
                         fp.to_decart();
-                        v->work[p] = fp.to_int();
-                        v->work[p].offset_add(int_center);
+                        v.work[p] = fp.to_int();
+                        v.work[p].offset_add(int_center);
 
 
                         if (p == 0)
-                              test_box.assign_pos(v->work[p].x, v->work[p].y);
+                              test_box.assign_pos(v.work[p].x, v.work[p].y);
                         else
                         {
-                              test_box.x1 = imin(test_box.x1, v->work[p].x);
-                              test_box.y1 = imin(test_box.y1, v->work[p].y);
-                              test_box.x2 = imax(test_box.x2, v->work[p].x);
-                              test_box.y2 = imax(test_box.y2, v->work[p].y);
+                              test_box.x1 = imin(test_box.x1, v.work[p].x);
+                              test_box.y1 = imin(test_box.y1, v.work[p].y);
+                              test_box.x2 = imax(test_box.x2, v.work[p].x);
+                              test_box.y2 = imax(test_box.y2, v.work[p].y);
                         }
 
                   }
@@ -306,6 +317,7 @@ void draw_vessels(const BGRA fill_color, const BGRA outline_color)
                         //screen->draw_text(small_font, test_box.hcenter(), test_box.vcenter(), string_format("%d", v->mmsi), 0x000000, HALIGN_CENTER | VALIGN_CENTER);
                         //cout << i << " accepted" << "\n";
                   }
+                 
 
             }
 
@@ -320,21 +332,23 @@ void draw_shapes(const BGRA fill_color, const BGRA outline_color)
 
       //rotate box and get new bounds
       irect new_box;
-      /* for (myshape shape : shapes)
-       {
-             if (fill_color != NO_COLOR || outline_color != NO_COLOR) {
-                   //calculate new transormed corners
-                   new_box = rotate_shape_box(&shape);
-                   if (new_box.is_intersect(SCREEN_RECT))
-                   {
-                         // check if full rotate geometry still visible
-                         new_box = rotate_shape(&shape);
-                         if (new_box.is_intersect(SCREEN_RECT))
-                               draw_shape(&shape, fill_color, outline_color);
-                   }
-             }
-       }
-       */
+      for (auto & shape : shapes)
+            //auto const & ent1 : mymap
+            //for (poly shape : shapes)
+      {
+            if (fill_color != NO_COLOR || outline_color != NO_COLOR) {
+                  //calculate new transormed corners
+                  new_box = rotate_shape_box(&shape.second);
+                  if (new_box.is_intersect(SCREEN_RECT))
+                  {
+                        // check if full rotate geometry still visible
+                        new_box = rotate_shape(&shape.second);
+                        if (new_box.is_intersect(SCREEN_RECT))
+                              screen->draw_shape(&shape.second, fill_color, outline_color);
+                  }
+            }
+      }
+
 }
 void draw_grid(double angle)
 {
@@ -382,12 +396,12 @@ void draw_frame()
       {
             // print `no GPS` and exit
             screen->draw_bg(0x001111);
-            screen->draw_text(SPECCY_FONT, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, "no GPS position", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
+            screen->draw_text(SPECCY_FONT, screen->get_width() / 2, screen->get_height() / 2, "no GPS position", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
             return;
       }
 
-      screen->draw_bg(0x000909);
-      screen->draw_text(SPECCY_FONT, VIEW_WIDTH / 2, VIEW_HEIGHT / 2, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
+      screen->draw_bg(0x0097c2);
+      //screen->draw_text(SPECCY_FONT, screen->get_width() / 2, 25, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
       //floatpt mypos = own_vessel.get_pos();
       //mypos.latlon2meter();
       // offset MYPOS from gps center to geometrical boat center
@@ -395,7 +409,9 @@ void draw_frame()
 
 #if map_show==1
       next_map_update = update_map_data(next_map_update);
-      draw_shapes(0xb7b074, 0x16150e);
+      //draw_shapes(0xb7b074, 0x16150e);
+      draw_shapes(0xb7b07400, 0x16150e00);
+      //draw_shapes(0x00FF00, 0x0000FF);
 #endif
 #if vessels_show==1
       draw_vessels(0xcd8183, 0x000000);
@@ -480,7 +496,7 @@ void video_loop_start() {
                   measure_start = frame_end;
                   frames_total = 0;
             }
-            screen->draw_text(SPECCY_FONT, 5, VIEW_HEIGHT - 5, fps_str, 0xFFFF00, VALIGN_TOP | HALIGN_LEFT);
+            //screen->draw_text(SPECCY_FONT, 5, VIEW_HEIGHT - 5, fps_str, 0xFFFF00, VALIGN_TOP | HALIGN_LEFT);
             screen->draw_text(SPECCY_FONT, 5, 5, fps_str, 0xFFFF00, VALIGN_BOTTOM | HALIGN_LEFT);
             // switch page
 
@@ -498,21 +514,22 @@ int main()
                   return 1;
 
             }
-            load_dicts(mysql);
+            init_db(mysql);
+            //load_dicts(mysql);
 
-            screen = new video_driver(480, 320, 32,5);
+            screen = new video_driver(480, 320, 32, 1); // debug purpose = 1 buffer, production value = 5
             if (screen->get_last_error())
-            
+
             {
                   printf("video_init error.\n");
                   return 1;
             }
-            screen->load_font(NORMAL_FONT,"/home/pi/projects/rpiais/font.bmp");
-            screen->load_font(SPECCY_FONT,"/home/pi/projects/rpiais/speccy.bmp");
-            
+            screen->load_font(NORMAL_FONT, "/home/pi/projects/rpiais/font.bmp");
+            screen->load_font(SPECCY_FONT, "/home/pi/projects/rpiais/speccy.bmp");
+
             min_fit = imin(
-                  imin(CENTER_X, VIEW_WIDTH - CENTER_X),
-                  imin(CENTER_Y, VIEW_HEIGHT - CENTER_Y)
+                  imin(CENTER_X, screen->get_width() - CENTER_X),
+                  imin(CENTER_Y, screen->get_height() - CENTER_Y)
             ) - 20;
             circle_radius = min_fit / 5;
 
@@ -539,5 +556,3 @@ int main()
 
       return 0;
 }
-
-

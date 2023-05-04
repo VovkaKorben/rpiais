@@ -20,38 +20,7 @@ double dm_s2deg(double dm_s)
 
 map<int, vector<vdm_field> > vdm_defs;
 map<int, int> vdm_length;
-
-vessels_class vessels(0);
-bool vessels_class::find_by_mmsi(uint32 mmsi, size_t & index)
-{
-      for (index = 0; index < items.size(); index++)
-            if (items[index].mmsi == mmsi)
-                  return true;
-      return false;
-}
-vessel * vessels_class::get_own()
-{
-      return &(items.at(0));
-}
-vessel * vessels_class::get_by_mmsi(uint32 mmsi)
-{
-      size_t i;
-      if (!find_by_mmsi(mmsi, i))
-      { // add a new one
-            vessel v(mmsi);
-            items.push_back(v);
-            i = items.size() - 1;
-      }
-      return &items[i];
-}
-vessels_class::vessels_class(uint32 self_mmsi)
-{
-      items.clear();
-      // push own vessel
-      vessel v(self_mmsi);
-      items.push_back(v);
-}
-
+map<int, vessel> vessels;
 
 struct msg_bulk {
       size_t total;
@@ -218,20 +187,20 @@ int _gll(StringArrayBulk * data)
       if (parse_char(d->at(5), data_valid))
             if (data_valid == 'A')
             {
-                  vessel * ownship = vessels.get_own();
+                  // vessel * ownship = vessels.get_own();
                   char lon_dir, lat_dir;
 
-                  if (parse_double(d->at(0), ownship->lat) && parse_char(d->at(1), lat_dir))
+                  if (parse_double(d->at(0), vessels[own_mmsi].lat) && parse_char(d->at(1), lat_dir))
                   {
                         if (lat_dir == 'S')
-                              ownship->lat = -ownship->lat;
-                        ownship->flags |= VESSEL_Y;
+                              vessels[own_mmsi].lat = -vessels[own_mmsi].lat;
+                        vessels[own_mmsi].flags |= VESSEL_Y;
                   }
-                  if (parse_double(d->at(2), ownship->lon) && parse_char(d->at(3), lon_dir))
+                  if (parse_double(d->at(2), vessels[own_mmsi].lon) && parse_char(d->at(3), lon_dir))
                   {
                         if (lon_dir == 'W')
-                              ownship->lon = -ownship->lon;
-                        ownship->flags |= VESSEL_X;
+                              vessels[own_mmsi].lon = -vessels[own_mmsi].lon;
+                        vessels[own_mmsi].flags |= VESSEL_X;
                   }
                   return 0;
             }
@@ -245,20 +214,20 @@ int _rmc(StringArrayBulk * data)
       if (parse_char(d->at(5), data_valid))
             if (data_valid == 'A')
             {
-                  vessel * ownship = vessels.get_own();
+                  //vessel * ownship = vessels.get_own();
                   char lon_dir, lat_dir;
 
-                  if (parse_double(d->at(0), ownship->lat) && parse_char(d->at(1), lat_dir))
+                  if (parse_double(d->at(0), vessels[own_mmsi].lat) && parse_char(d->at(1), lat_dir))
                   {
                         if (lat_dir == 'S')
-                              ownship->lat = -ownship->lat;
-                        ownship->flags |= VESSEL_Y;
+                              vessels[own_mmsi].lat = -vessels[own_mmsi].lat;
+                        vessels[own_mmsi].flags |= VESSEL_Y;
                   }
-                  if (parse_double(d->at(2), ownship->lon) && parse_char(d->at(3), lon_dir))
+                  if (parse_double(d->at(2), vessels[own_mmsi].lon) && parse_char(d->at(3), lon_dir))
                   {
                         if (lon_dir == 'W')
-                              ownship->lon = -ownship->lon;
-                        ownship->flags |= VESSEL_X;
+                              vessels[own_mmsi].lon = -vessels[own_mmsi].lon;
+                        vessels[own_mmsi].flags |= VESSEL_X;
                   }
                   return 0;
             }
@@ -363,8 +332,12 @@ int _vdm(StringArrayBulk * data)
             if (f.field_name == "MMSI")
             {
                   mmsi = bc.get_int(&f);
-                  if (mmsi != 0)
-                        v = vessels.get_by_mmsi(mmsi);
+                  if (vessels.count(mmsi) == 0) // add a new
+                  {
+                        vessels.emplace(mmsi, vessel());
+                  }
+                  v = &vessels[mmsi];
+
             }
             else if (v != nullptr)
             {
@@ -461,6 +434,7 @@ map<std::string, FnPtr> lut = {
 
 unsigned int parse_nmea(std::string nmea_str)
 {
+      //printf("NMEA: %s\n", nmea_str.c_str());
       unsigned int r = NMEA_GOOD;
       if (nmea_str.length() == 0)
             return (r | NMEA_EMPTY);

@@ -21,7 +21,7 @@ bool mysql_driver::exec_file(std::string filename) {
 
       std::string query = read_text(filename);
       if (query.empty()) return false;
-      exec(query);
+      return exec(query);
 
 }
 bool mysql_driver::exec(std::string query) {
@@ -29,9 +29,13 @@ bool mysql_driver::exec(std::string query) {
 
       if (mysql_query(connection, query.c_str()))
       {
+            fprintf(stderr, " mysql_query() failed\n");
+            fprintf(stderr, " query: %s\n", query.c_str());
+            fprintf(stderr, " %s\n", mysql_error(connection));
             last_error_str = mysql_error(connection);
             return false;
       }
+      //printf("Query OK: %s\n", query.c_str());
       return true;
 
 }
@@ -69,16 +73,15 @@ bool mysql_driver::fetch() {
 void mysql_driver::free_result() {
       mysql_free_result(res);
 }
-int mysql_driver::row_count() {
+my_ulonglong mysql_driver::row_count() {
       return mysql_num_rows(res);
 }
-bool mysql_driver::prepare(const int index, const char * filename) {
+bool mysql_driver::prepare(const int index, std::string filename) {
+      if (pstmt.count(index) != 0)  return false;
       std::string query = read_text(filename);
       if (query.empty()) return false;
-      //
-      if (pstmt.count(index)!=0)  return false;
-      //std::map<int, MYSQL_STMT *> pstmt;
-      MYSQL_STMT * ps = mysql_stmt_init(connection);
+      pstmt.emplace(index, query);
+      return true;
 }
 
 
@@ -166,22 +169,22 @@ double mysql_driver::get_myfloat(const std::string field_name)
       return get_myfloat(index);
 }
 
-bool load_dicts(mysql_driver * driver)
+int load_dicts(mysql_driver * driver)
 {
 
-      int status;
+      //int status;
       //      unsigned long * length;
-      std::string sq, nmea;
+      //std::string sq, nmea;
 
       // load sentences 
 
-      sentences.clear();
+      sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear();
       driver->exec_file("/home/pi/projects/rpiais/sql/readdicts.sql");
 
       int dict_index = 0;
       do {
             if (!driver->store())
-                  return false;
+                  return 1;
 
 
             while (driver->fetch()) {
@@ -212,8 +215,6 @@ bool load_dicts(mysql_driver * driver)
                         break;
                   }
                   case 3: {
-                        //int xx = get_myint(row, 5);
-
                         int msg_id = driver->get_myint("msg_id");
                         if (vdm_defs.count(msg_id) == 0)
                               vdm_defs[msg_id] = {};
@@ -241,25 +242,25 @@ bool load_dicts(mysql_driver * driver)
       } while (driver->has_next());
 
 
-      return true;
+      return 0;
 
 
 }
 int init_db(mysql_driver * driver)
 {
-      std::string sq;
-
-      driver->prepare(PREPARED_NMEA, "/home/pi/projects/rpiais/sql/nmearead.sql");
-      driver->prepare(PREPARED_MAP, "/home/pi/projects/rpiais/sql/mapread.sql");
-
       driver->exec_file("/home/pi/projects/rpiais/sql/mapread_init.sql");
       driver->has_next();
+
+      driver->prepare(PREPARED_NMEA, "/home/pi/projects/rpiais/sql/nmearead.sql");
+      driver->prepare(PREPARED_MAP1, "/home/pi/projects/rpiais/sql/mapread1.sql");
+      driver->prepare(PREPARED_MAP2, "/home/pi/projects/rpiais/sql/mapread2.sql");
+
+      //driver->exec_prepared(PREPARED_NMEA, 1234);
 
       // read last gps position
       driver->exec_file("/home/pi/projects/rpiais/sql/gpsread.sql");
       driver->store();
-
-      sq = read_file("/home/pi/projects/rpiais/sql/gpsread.sql");
+      // driver->exec_file("/home/pi/projects/rpiais/sql/gpsread.sql");
       if (driver->row_count() == 1)
       {
             driver->fetch();

@@ -25,7 +25,7 @@ private:
 
 
 
-      bucketset aet, et[VIEW_HEIGHT];
+      bucketset aet, *et;
 
       void edge_tables_reset();
 

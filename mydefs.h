@@ -11,6 +11,9 @@
 #include <memory>
 #include <mysql.h>
 
+#define own_mmsi 0
+
+
 #ifdef __clang__ //clang_compiler
 #elif __GNUC__ //GNU_C_compiler
 
@@ -50,8 +53,7 @@ using namespace std;
 
 
 
-const int VIEW_WIDTH = 480;
-const int VIEW_HEIGHT = 320;
+//const int VIEW_WIDTH = 480;const int VIEW_HEIGHT = 320;
 
 
 inline int imin(int v1, int v2)
@@ -73,7 +75,7 @@ inline int imax(int v1, int v2)
 #define PI180 1/PI*180.0
 #define RAD 180/PI
 
-#define NOSIZE_DIMENSION 10.0
+
 typedef signed char int8;
 typedef int8 * pint8;
 typedef unsigned char uint8;
@@ -284,12 +286,12 @@ struct poly {
             points_count = 0;
       }
 };
-struct myshape :poly
-{
-      unsigned int id;
-
-
-};
+//struct myshape :poly
+//{
+//      unsigned int id;
+//
+//
+//};
 
 
 // FLAGS
@@ -305,17 +307,18 @@ const uint32 VESSEL_LRTB = VESSEL_L | VESSEL_R | VESSEL_T | VESSEL_B;
 const uint32 VESSEL_LRTBA = VESSEL_L | VESSEL_R | VESSEL_T | VESSEL_B | VESSEL_A;
 const uint32 VESSEL_XY = VESSEL_X | VESSEL_Y;
 const uint32 VESSEL_XYLRTBA = VESSEL_L | VESSEL_R | VESSEL_T | VESSEL_B | VESSEL_X | VESSEL_Y | VESSEL_A;
-
-struct vessel :poly
+#define NOSIZE_DIMENSION 10.0
+struct vessel:poly
 {
-      uint32 mmsi, imo, accuracy, status, heading, shiptype, T, B, L, R;
+public:
+      uint32  imo, accuracy, status, heading, shiptype, T, B, L, R;
       double lat, lon, turn, speed, course;
       string shipname, callsign;
       uint32 flags;
+      poly figure;
       //bool lat_ok, lon_ok, size_ok;
-      vessel(uint32 _mmsi)
+      vessel()
       {
-            mmsi = _mmsi;
             flags = 0;
             shipname = "";
             last_access = utc_ms();

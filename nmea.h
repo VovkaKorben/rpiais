@@ -101,18 +101,7 @@ extern own_vessel_class own_vessel;
 
 
 
-class vessels_class
-{
-
-public:
-      vector<vessel> items;
-      bool find_by_mmsi(uint32 mmsi, size_t & index);
-      vessel * get_own();
-      vessel * get_by_mmsi(uint32 mmsi);
-      //vessels_class();
-      vessels_class(uint32 self_mmsi);
-};
-extern vessels_class vessels;
+extern map<int,vessel> vessels;
 
 struct satellite
 {
