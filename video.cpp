@@ -58,12 +58,12 @@ void video_driver::flip()
       fb_current = fb_start + pixel_count * current_fb;
       last_error = FB_NO_ERROR;
 }
-video_driver::video_driver(int _width, int _height, int _bpp, int _buffer_count) {
+video_driver::video_driver(int _width, int _height, int _buffer_count) {
 
 
       fb_fix_screeninfo finfo;
       width = _width, height = _height, buffer_count = _buffer_count;
-      bpp = _bpp, bytes_per_pix = _bpp >> 3;
+
 
       fbdev = open("/dev/fb0", O_RDWR);
       if (!fbdev) { last_error = FB_OPEN_FAILED; return; }
@@ -85,7 +85,7 @@ video_driver::video_driver(int _width, int _height, int _bpp, int _buffer_count)
       fb_size = screen_size * buffer_count;
       pixel_count = width * height;
 
-      fb_start = (puint32)mmap(NULL, fb_size, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);// map framebuffer to user memory 
+      fb_start = (PIX_PTR)mmap(NULL, fb_size, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);// map framebuffer to user memory 
       if ((intptr_t)fb_start == -1) { last_error = FB_MMAP_FAILED; return; }
 
       // set buffer 0 as first
@@ -93,7 +93,7 @@ video_driver::video_driver(int _width, int _height, int _bpp, int _buffer_count)
       fb_current = fb_start;
 
 
-      CENTER_X = width / 4;
+      CENTER_X = width / 3;
       CENTER_Y = height / 2;
       VIEWBOX_RECT.assign_pos(-CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1);
       SCREEN_RECT.assign_pos(0, 0, width - 1, height - 1);
@@ -109,38 +109,60 @@ video_driver::~video_driver() {
 }
 
 ////////////////////////////////////////////////////////////
-inline void video_driver::draw_pix(const int x, const int y, const BGRA color) {
+inline void video_driver::draw_pix(const int x, const int y, const ARGB color) {
       if (x < 0) return;
       if (y < 0) return;
       if (x >= width) return;
       if (y >= height) return;
       //puint8 addr = (puint8)(pix_ptr - y * SCANLINE_LEN + x * BYTES_PER_PIXEL);
-      puint32 addr = fb_current + x + (height - y - 1) * width;
-      int alpha = color & 0xFF;
+      PIX_PTR addr = fb_current + (height - y - 1) * width + x;
+
+      int alpha = color >> 24;
+
+#if bpp==16
+      WARN_FLOATCONVERSION_OFF
+            WARN_CONVERSION_OFF
+            if (alpha == 0) // no transparency at all
+                  *((puint16)addr) = ((color >> 8) & 0xF800) | ((color >> 5) & 0x07E0) | ((color >> 3) & 0x001F);
+            else if (alpha != 255) // has semi-transparency
+            {
+                  float a = (float)alpha / 255.0f, ia = 1.0f - a;
+                  uint16 c = *((puint16)addr);
+
+                  uint32 r = ((color & 0x00FF0000) >> 8) * a + (c & 0xF800) * ia;
+                  uint32 g = ((color & 0x0000FF00) >> 5) * a + (c & 0x07E0) * ia;
+                  uint32 b = ((color & 0x000000FF) >> 3) * a + (c & 0x001F) * ia;
+
+                  *((puint16)addr) = (r & 0xF800) | (g & 0x07E0) | (b & 0x001F);
+
+            }
+      WARN_RESTORE
+            WARN_RESTORE
+#else
       if (alpha == 0) // no transparency, simple put color
-      {
-            *addr = color;
-            // int32 x = *((puint32)addr);
-
-          //  *((puint32)addr) = color;
-            //int32 y = *((puint32)addr);
-      }
+            *((puint32)addr) = color;
       else if (alpha != 255) {
-            //new_color = (alpha) * (foreground_color)+(1 - alpha) * (background_color)
-            // r0 = int(r1 * a + r0 * ia);
-            puint8 addr8 = (puint8)addr;
             float a = (float)alpha / 255.0f, ia = 1.0f - a;
-            *addr8 = (uint8)(((color >> 24) & 0xFF) * a + ia * *addr8);
-            addr8++;
-            *addr8 = ((color >> 16) & 0xFF) * a + ia * *addr8;
-            addr8++;
-            *addr8 = ((color >> 8) & 0xFF) * a + ia * *addr8;
-            addr8++;
-            *addr8 = 0;
-
+            *addr = ((color >> 24) & 0xFF) * a + *addr * ia;
+            addr++;
+            *addr = ((color >> 16) & 0xFF) * a + *addr * ia;
+            addr++;
+            *addr = ((color >> 8) & 0xFF) * a + *addr * ia;
+            addr++;
+            *addr = 0;
       }
+      *((puint32)addr) = color;
+
+#endif
+
+
 }
-void video_driver::draw_line(int x0, int y0, int x1, int y1, const BGRA color) {
+void video_driver::draw_fill_rect(int x0, int y0, int x1, int y1, const ARGB color) {
+      for (int y = y0; y < y1; y++)
+            for (int x = x0; x < x1; x++)
+                  draw_pix(x, y, color);
+}
+void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
       int w = x1 - x0;
       int h = y1 - y0;
       int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
@@ -171,12 +193,8 @@ void video_driver::draw_line(int x0, int y0, int x1, int y1, const BGRA color) {
             }
       }
 }
-void video_driver::draw_line_fast(int y, int xs, int xe, const BGRA color)
-/*
-* ONLY HORIZONTAL LINES
-* WITHOUT ALPHA
-*/
-{
+void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
+{ //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
       if (xe < 0 || xs >= width) return;
 
@@ -184,13 +202,23 @@ void video_driver::draw_line_fast(int y, int xs, int xe, const BGRA color)
       if (xs < 0) xs = 0;
       if (xe >= width) xe = width - 1;
 
-      puint32 addr = fb_current + (height - y - 1) * width + xs;
       xe -= xs;
+      PIX_PTR addr = fb_current + (height - y - 1) * width + xs;
+#if bpp==16
 
+
+      WARN_CONVERSION_OFF
+            uint16 c = to16(color);
+      WARN_RESTORE
+            while (xe--)
+                  *(addr++) = c;
+#else 
       while (xe--)
             *(addr++) = color;
+#endif
+
 }
-void video_driver::draw_polyline(int x, int y, const BGRA color, int close_polyline)
+void video_driver::draw_polyline(int x, int y, const ARGB color, int close_polyline)
 {
       static int count = 0;
       static int first_x, first_y;
@@ -221,7 +249,7 @@ void video_driver::draw_polyline(int x, int y, const BGRA color, int close_polyl
                         count++;
                   }
 }
-void video_driver::draw_text(int font_index, int x, int y, string s, const BGRA color, int flags)
+void video_driver::draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags)
 {
       if (fonts.count(font_index) == 0)
             return;
@@ -272,45 +300,93 @@ void video_driver::draw_text(int font_index, int x, int y, string s, const BGRA 
       }
 
 }
-void video_driver::draw_circle(int cx, int cy, int radius, const BGRA color)
+void video_driver::draw_circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill)
 {
-      int f = 1 - radius;
-      int ddF_x = 0;
-      int ddF_y = -2 * radius;
-      int x = 0;
-      int y = radius;
+      if (fill != NO_COLOR) {
+            int f = 1 - radius;
+            int ddF_x = 0;
+            int ddF_y = -2 * radius;
+            int x = 0;
+            int y = radius;
 
-      draw_pix(cx, cy + radius, color);
-      draw_pix(cx, cy - radius, color);
-      draw_pix(cx + radius, cy, color);
-      draw_pix(cx - radius, cy, color);
+            draw_line_fast(cy, cx - radius, cx + radius, fill);
+            draw_pix(cx, cy + radius, fill);
+            draw_pix(cx, cy - radius, fill);
 
-      while (x < y)
-      {
-            if (f >= 0)
+
+
+            while (x < y)
             {
-                  y--;
-                  ddF_y += 2;
-                  f += ddF_y;
+                  if (f >= 0)
+                  {
+                        y--;
+                        ddF_y += 2;
+                        f += ddF_y;
+                  }
+                  x++;
+                  ddF_x += 2;
+                  f += ddF_x + 1;
+
+                  draw_line_fast(cy + y, cx - x, cx + x, fill);
+                  draw_line_fast(cy - y, cx - x, cx + x, fill);
+
+                  draw_line_fast(cy - x, cx - y, cx + y, fill);
+                  draw_line_fast(cy + x, cx - y, cx + y, fill);
+
+
             }
-            x++;
-            ddF_x += 2;
-            f += ddF_x + 1;
-            draw_pix(cx + x, cy + y, color);
-            draw_pix(cx - x, cy + y, color);
-            draw_pix(cx + x, cy - y, color);
-            draw_pix(cx - x, cy - y, color);
-            draw_pix(cx + y, cy + x, color);
-            draw_pix(cx - y, cy + x, color);
-            draw_pix(cx + y, cy - x, color);
-            draw_pix(cx - y, cy - x, color);
       }
+      if (outline != NO_COLOR) {
+            int f = 1 - radius;
+            int ddF_x = 0;
+            int ddF_y = -2 * radius;
+            int x = 0;
+            int y = radius;
+
+
+            draw_pix(cx, cy + radius, outline);
+            draw_pix(cx, cy - radius, outline);
+            draw_pix(cx + radius, cy, outline);
+            draw_pix(cx - radius, cy, outline);
+
+            while (x < y)
+            {
+                  if (f >= 0)
+                  {
+                        y--;
+                        ddF_y += 2;
+                        f += ddF_y;
+                  }
+                  x++;
+                  ddF_x += 2;
+                  f += ddF_x + 1;
+
+
+                  draw_pix(cx + x, cy + y, outline);
+                  draw_pix(cx - x, cy + y, outline);
+                  draw_pix(cx + x, cy - y, outline);
+                  draw_pix(cx - x, cy - y, outline);
+                  draw_pix(cx + y, cy + x, outline);
+                  draw_pix(cx - y, cy + x, outline);
+                  draw_pix(cx + y, cy - x, outline);
+                  draw_pix(cx - y, cy - x, outline);
+            }
+      }
+
 }
-void video_driver::draw_bg(const BGRA background)
+void video_driver::draw_bg(const ARGB color)
 {
-      puint32 addr = fb_current; // fb start pointer
+      PIX_PTR addr = fb_current; // fb start pointer
+#if bpp==16
+      WARN_CONVERSION_OFF
+            uint16 c = to16(color);
+      WARN_RESTORE
+            for (int pix = 0; pix < pixel_count; pix++)
+                  *(addr++) = c;
+#else 
       for (int pix = 0; pix < pixel_count; pix++)
-            *(addr++) = background;
+            *(addr++) = color;
+#endif
 
 }
 ////////////////////////////////////////////////////////////
@@ -446,7 +522,7 @@ void video_driver::calc_fill(const poly * sh) {
 
       }
 }
-void video_driver::draw_fill(const BGRA color)
+void video_driver::draw_fill(const ARGB color)
 {
       /*if (dbg_flag)
       {
@@ -499,7 +575,7 @@ void video_driver::draw_fill(const BGRA color)
       }
 
 }
-void video_driver::draw_outline(const poly * sh, const BGRA color)
+void video_driver::draw_outline(const poly * sh, const ARGB color)
 {
 
 
@@ -525,7 +601,7 @@ void video_driver::draw_outline(const poly * sh, const BGRA color)
       }
 }
 ////////////////////////////////////////////////////////////
-void video_driver::draw_shape(const poly * sh, const BGRA fill_color, const BGRA outline_color)
+void video_driver::draw_shape(const poly * sh, const ARGB fill_color, const ARGB outline_color)
 {
       if (fill_color != NO_COLOR)
       {

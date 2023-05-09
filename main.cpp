@@ -4,11 +4,16 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <algorithm>
+#include <unistd.h>
+//#include <limits.h>
+#include <cfloat>
 #include "mydefs.h"
 #include "pixfont.h"
 #include "video.h"
 #include "nmea.h"
 #include "db.h"
+#include "inputs.h"
 
 #if map_show==1
 const uint64_t SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
@@ -26,20 +31,25 @@ mysql_driver * mysql;
 
 
 const int max_zoom_index = 9;
-const int ZOOM_RANGE[max_zoom_index] = { 50, 100, 200,300, 1000, 2000, 3000, 5000,10000 };
+const int ZOOM_RANGE[max_zoom_index] = { 50, 75,200,300, 1000, 2000, 3000, 5000,10000 };
 int zoom_index = 2;
 double  zoom;
 int update_nmea(int msg_id) {
       int nmea_result;
       mysql->exec_prepared(PREPARED_NMEA, msg_id);
       mysql->store();
+      int total = 0;
       while (mysql->fetch())
       {
             msg_id = mysql->get_myint("id");
             nmea_result = parse_nmea(mysql->get_mystr("data"));
             if (nmea_result)
                   printf("parse_nmea returns %d\n", nmea_result);
+            total++;
       }
+      if (total)
+            printf("NMEA processed: %d\n", total);
+
       return msg_id;
 }
 void zoom_changed(int new_zoom_index)
@@ -55,11 +65,11 @@ void zoom_changed(int new_zoom_index)
 ////////////////////////////////////////////////////////////
 intpt transform_point(floatpt pt)
 {
-      pt.offset_remove(own_vessel.pos);
+      pt.offset_remove(own_vessel.get_meters());
 
       pt.to_polar();
-      if (own_vessel.relative)
-            pt.x -= own_vessel.heading;
+      if (own_vessel.get_relative())
+            pt.x -= own_vessel.get_heading();
       pt.y *= zoom;
       pt.to_decart();
       int x = int(round(pt.x)) + CENTER_X,
@@ -151,12 +161,11 @@ int load_shapes()
       }
       const std::string & tmp = sstr.str();
       const char * cstr = tmp.c_str();
-
       mysql->exec_prepared(PREPARED_MAP1,
-                           own_vessel.pos.x + VIEWBOX_RECT.x1 * overlap_coeff,
-                           own_vessel.pos.y + VIEWBOX_RECT.y1 * overlap_coeff,
-                           own_vessel.pos.x + VIEWBOX_RECT.x2 * overlap_coeff,
-                           own_vessel.pos.y + VIEWBOX_RECT.y2 * overlap_coeff,
+                           own_vessel.get_meters().x + VIEWBOX_RECT.x1 * overlap_coeff,
+                           own_vessel.get_meters().y + VIEWBOX_RECT.y1 * overlap_coeff,
+                           own_vessel.get_meters().x + VIEWBOX_RECT.x2 * overlap_coeff,
+                           own_vessel.get_meters().y + VIEWBOX_RECT.y2 * overlap_coeff,
                            cstr);
       mysql->free_result();
       while (mysql->has_next());
@@ -254,70 +263,77 @@ uint64_t  update_map_data(uint64_t next_check)
 }
 #endif
 ////////////////////////////////////////////////////////////
-void draw_vessels(const BGRA fill_color, const BGRA outline_color)
+void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 {
       irect test_box;
       const vessel * v;
       floatpt vessel_center, fp;
       intpt int_center;
+      int circle_size = max(int(6 * zoom), 3);
       for (const auto & vx : vessels)
       {
             //printf("lat lon: %.12f,%.12f\n", v.lat, v.lon);
            // printf("mmsi lat lon: %d %.12f,%.12f\n",v.first,  v.lat, v.lon);
             v = &vx.second;
-            if ((v->flags & VESSEL_XY) == VESSEL_XY)
+            if (v->pos_ok)
             {
-                  
+
                   // calculate vessel center (with zoom and rotation)
-                  
-                  vessel_center = { v.lon,v.lat };
+
+                  vessel_center = v->gps;
                   vessel_center.latlon2meter();
-                  vessel_center.offset_remove(own_vessel.pos);
+                  vessel_center.offset_remove(own_vessel.get_meters());
                   vessel_center.to_polar();
                   vessel_center.y *= zoom;
-                  if (own_vessel.relative)
-                        vessel_center.x -= own_vessel.heading;
+                  if (own_vessel.get_relative())
+                        vessel_center.x -= own_vessel.get_heading();
                   vessel_center.to_decart();
                   int_center = vessel_center.to_int();
                   int_center.offset_add(CENTER_X, CENTER_Y);
-
-                  // rotate each point
-                  for (int p = 0; p < v.points_count; p++)
+                  if (v->size_ok && v->angle_ok)
                   {
-                        fp = v.origin[p];
-                        fp.to_polar();
-                        fp.y *= zoom;
-
-                        // only if size and angle known - rotate
-                        if ((v.flags & VESSEL_LRTBA) == VESSEL_LRTBA)
+                        // rotate each point
+                        for (int p = 0; p < v->points_count; p++)
                         {
-                              fp.x -= v.course;
-                              if (own_vessel.relative)
-                                    fp.x -= own_vessel.heading;
+                              fp = v->origin[p];
+                              fp.to_polar();
+                              fp.y *= zoom;
+
+                              // only if size and angle known - rotate
+
+
+                              {
+                                    fp.x -= v->course;
+                                    if (own_vessel.get_relative())
+                                          fp.x -= own_vessel.get_heading();
+                              }
+                              fp.to_decart();
+                              v->work[p] = fp.to_int();
+                              v->work[p].offset_add(int_center);
+
+
+                              if (p == 0)
+                                    test_box.assign_pos(v->work[p].x, v->work[p].y);
+                              else
+                              {
+                                    test_box.x1 = imin(test_box.x1, v->work[p].x);
+                                    test_box.y1 = imin(test_box.y1, v->work[p].y);
+                                    test_box.x2 = imax(test_box.x2, v->work[p].x);
+                                    test_box.y2 = imax(test_box.y2, v->work[p].y);
+                              }
+
                         }
-                        fp.to_decart();
-                        v.work[p] = fp.to_int();
-                        v.work[p].offset_add(int_center);
-
-
-                        if (p == 0)
-                              test_box.assign_pos(v.work[p].x, v.work[p].y);
-                        else
+                        if (test_box.is_intersect(SCREEN_RECT))
                         {
-                              test_box.x1 = imin(test_box.x1, v.work[p].x);
-                              test_box.y1 = imin(test_box.y1, v.work[p].y);
-                              test_box.x2 = imax(test_box.x2, v.work[p].x);
-                              test_box.y2 = imax(test_box.y2, v.work[p].y);
+                              screen->draw_shape(v, fill_color, outline_color);
+                              //screen->draw_text(small_font, test_box.hcenter(), test_box.vcenter(), string_format("%d", v->mmsi), 0x000000, HALIGN_CENTER | VALIGN_CENTER);
+                              //cout << i << " accepted" << "\n";
                         }
-
                   }
-                  if (test_box.is_intersect(SCREEN_RECT))
-                  {
-                        screen->draw_shape(v, fill_color, outline_color);
-                        //screen->draw_text(small_font, test_box.hcenter(), test_box.vcenter(), string_format("%d", v->mmsi), 0x000000, HALIGN_CENTER | VALIGN_CENTER);
-                        //cout << i << " accepted" << "\n";
+                  else
+                  { //unknown size or angle, just draw small circle with position
+                        screen->draw_circle(int_center.x, int_center.y, circle_size, 0x00000000, 0x0000FF00);
                   }
-                 
 
             }
 
@@ -327,7 +343,7 @@ void draw_vessels(const BGRA fill_color, const BGRA outline_color)
 
       }
 }
-void draw_shapes(const BGRA fill_color, const BGRA outline_color)
+void draw_shapes(const ARGB fill_color, const ARGB outline_color)
 {
 
       //rotate box and get new bounds
@@ -354,18 +370,21 @@ void draw_grid(double angle)
 {
 
       floatpt fp;
-      const string sides = "WSEN";
+      //const string sides = "ESWN";
+      const string sides = " S N";
       for (int s = 0; s < 4; s++)
       {
+            // axis
             fp.x = -angle;
             fp.y = min_fit;
             fp.to_decart();
-            screen->draw_line(CENTER_X, CENTER_Y, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), 0x00000000);
+            screen->draw_line(CENTER_X, CENTER_Y, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), 0x10000000);
 
+            // axis letters
             fp.x = -angle;
             fp.y = min_fit + 9;
             fp.to_decart();
-            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), sides.substr(s, 1), 0x88000000, HALIGN_CENTER | VALIGN_CENTER);
+            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), sides.substr(s, 1), 0x00000000, HALIGN_CENTER | VALIGN_CENTER);
 
             angle += 90.0;
             if (angle >= 360.0) angle -= 360.0;
@@ -374,7 +393,10 @@ void draw_grid(double angle)
       string s;
       for (int i = 1; i < 6; i++)
       {
-            screen->draw_circle(CENTER_X, CENTER_Y, i * circle_radius, 0x22000000);
+            // distance circle
+            screen->draw_circle(CENTER_X, CENTER_Y, i * circle_radius, 0x10000000, NO_COLOR);
+
+            // distance marks
             fp.x = -angle;
             fp.y = circle_radius * i;
             fp.to_decart();
@@ -383,8 +405,51 @@ void draw_grid(double angle)
                   s = string_format("%d.%d", v / 1000, v % 1000);
             else
                   s = string_format("%d", v);
-            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), s, 0x220033, HALIGN_CENTER | VALIGN_CENTER);
+            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), s, 0x0, HALIGN_CENTER | VALIGN_CENTER);
       }
+
+}
+
+struct less_than_key
+{
+      inline bool operator() (const int & mmsi0, const int & mmsi1)
+      {
+            double d0 = vessels[mmsi0].distance, d1 = vessels[mmsi1].distance;
+            if (isnan(d0)) return false;
+            else if (isnan(d1)) return true;
+            else return d0 < d1;
+
+      }
+};
+void draw_vessels_info() {
+      int left = CENTER_X * 2;
+      //w = screen->get_width() / 3;
+      screen->draw_fill_rect(left, 0, screen->get_width(), screen->get_height(), 0xA0FFFFFF);
+
+      // calculate distance + get all MMSI to vector
+      std::vector<int> mmsi;
+      for (std::map<int, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {
+
+            if (it->second.pos_ok)
+                  it->second.distance = it->second.gps.haversine(own_vessel.get_gps());
+
+            else
+                  it->second.distance = NAN;
+
+            mmsi.push_back(it->first);
+      }
+
+      std::sort(mmsi.begin(), mmsi.end(), less_than_key());
+      int lines_count = min((int)mmsi.size(), 10);
+      int y_coord;
+      for (int i = 0; i < lines_count; i++)
+      {
+            y_coord = screen->get_height() - 5 - i * 10;
+            screen->draw_text(SPECCY_FONT, left + 5, y_coord, string_format("%d", mmsi[i]), 0x00000000, VALIGN_TOP | HALIGN_LEFT);
+            screen->draw_text(SPECCY_FONT, left + 105, y_coord, string_format("%.3f", vessels[mmsi[i]].distance), 0x00000000, VALIGN_TOP | HALIGN_LEFT);
+      }
+
+      //for (int y = 5; y < screen->get_height(); y += 10)
 
 }
 void draw_frame()
@@ -409,40 +474,65 @@ void draw_frame()
 
 #if map_show==1
       next_map_update = update_map_data(next_map_update);
-      //draw_shapes(0xb7b074, 0x16150e);
-      draw_shapes(0xb7b07400, 0x16150e00);
-      //draw_shapes(0x00FF00, 0x0000FF);
+      draw_shapes(0xb7b074, 0x16150e);
 #endif
 #if vessels_show==1
       draw_vessels(0xcd8183, 0x000000);
 #endif
+      //
+            /*
+            uint64_t currentTime = utc_ms();
+            nbFrames++;
+            uint64_t xxx = currentTime - last_time;
+            if (currentTime - last_time >= FPS_INTERVAL) { // If last prinf() was more than 1 sec ago
+                  // printf and reset timer
+                  fps = string_format("Frame: %.3fms", FPS_INTERVAL / double(nbFrames));
+                  nbFrames = 0;
+                  last_time += FPS_INTERVAL;
+            }
+            */
+
+
+      draw_grid(own_vessel.get_relative() ? own_vessel.get_heading() : 0.0);
+      draw_vessels_info();
 
       /*
-      uint64_t currentTime = utc_ms();
-      nbFrames++;
-      uint64_t xxx = currentTime - last_time;
-      if (currentTime - last_time >= FPS_INTERVAL) { // If last prinf() was more than 1 sec ago
-            // printf and reset timer
-            fps = string_format("Frame: %.3fms", FPS_INTERVAL / double(nbFrames));
-            nbFrames = 0;
-            last_time += FPS_INTERVAL;
-      }
+      draw_text(small_font, 5, VIEW_HEIGHT - 10, string_format("Angle: %.2f", my_angle), 0x000000);
+      draw_text(small_font, 5, VIEW_HEIGHT - 20, string_format("Pos: %.2f x %.2f", mypos.x, mypos.y), 0x000000);
+      draw_text(small_font, 5, VIEW_HEIGHT - 30, string_format("[ZOOM] ind: %d value: %d coeff: %.5f%", zoom_index, ZOOM_RANGE[zoom_index], zoom), 0x000000);
+      draw_text(small_font, 5, VIEW_HEIGHT - 40, string_format("Mouse: %d x %d", mouse_pos.x, mouse_pos.y), 0x000000);
+      draw_text(small_font, 5, VIEW_HEIGHT - 50, fps, 0x000000);
       */
-
-
-      // draw_grid(relative ? my_angle : 0.0);
-       /*
-       draw_text(small_font, 5, VIEW_HEIGHT - 10, string_format("Angle: %.2f", my_angle), 0x000000);
-       draw_text(small_font, 5, VIEW_HEIGHT - 20, string_format("Pos: %.2f x %.2f", mypos.x, mypos.y), 0x000000);
-       draw_text(small_font, 5, VIEW_HEIGHT - 30, string_format("[ZOOM] ind: %d value: %d coeff: %.5f%", zoom_index, ZOOM_RANGE[zoom_index], zoom), 0x000000);
-       draw_text(small_font, 5, VIEW_HEIGHT - 40, string_format("Mouse: %d x %d", mouse_pos.x, mouse_pos.y), 0x000000);
-       draw_text(small_font, 5, VIEW_HEIGHT - 50, fps, 0x000000);
-       */
 
 
 }
 ////////////////////////////////////////////////////////////
 
+void parse_input(void)
+{
+      //---------------------------------------------
+      //----- CHECK FIFO FOR ANY RECEIVED BYTES -----
+      //---------------------------------------------
+      // Read up to 255 characters from the port if they are there
+      if (our_input_fifo_filestream != -1)
+      {
+            unsigned int  InputBuffer[256];
+            ssize_t BufferLength = read(our_input_fifo_filestream, (void *)InputBuffer, 255);		//Filestream, buffer to store in, number of bytes to read (max)
+            if (BufferLength < 0)
+            {
+                  //An error occured (this can happen)
+            }
+            else if (BufferLength == 0)
+            {
+                  //No data waiting
+            }
+            else
+            {
+                  // for (ssize_t i = 0; i < BufferLength / (ssize_t)EV_SIZE; i++)                        screen->draw_text(SPECCY_FONT, 5, 10 * i, string_format(" %.08X", InputBuffer[i]), 0x00AA0000, VALIGN_BOTTOM | HALIGN_LEFT);
+                   //printf("event: %.08X\n", InputBuffer[i]);
+            }
+      }
+}
 inline unsigned long long tm_diff(timespec c, timespec p)
 {
       unsigned long long s = c.tv_sec - p.tv_sec, n = c.tv_nsec - p.tv_nsec;
@@ -471,6 +561,7 @@ void video_loop_start() {
             clock_gettime(CLOCK_REALTIME, &frame_start);
             last_msg_id = update_nmea(last_msg_id);
             draw_frame();
+            parse_input();
 
 
             // df = timediff(pt, ct);
@@ -491,7 +582,8 @@ void video_loop_start() {
                   diff = (frame_end.tv_sec - measure_start.tv_sec) * 1000000000L + frame_end.tv_nsec - measure_start.tv_nsec;
 
                   // printf("diff:%-13ld\tframes:%-5d\tframes_total:%-12ld\t%.10f\n", diff, frames, frames_total, frames_total/ (double)frames);
-                  fps_str = string_format("Frame: %.3f ms", frames_total / 1000000.0 / frames);
+                 // fps_str = string_format("Frame: %.3f ms", frames_total / 1000000.0 / frames);
+                  fps_str = "none";
                   frames = 0;
                   measure_start = frame_end;
                   frames_total = 0;
@@ -507,6 +599,13 @@ void video_loop_start() {
 ////////////////////////////////////////////////////////////
 int main()
 {
+      /* floatpt fp1 = { 24.9532280834854000,60.1674667786688000 },
+             fp2 = { 24.955862012736600,60.167291983683600 };
+       fp1.latlon2meter();
+       fp2.latlon2meter();
+       double d = fp1.distance(fp2);
+       */
+
       try {
             mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
             if (mysql->get_last_error_str()) {
@@ -517,9 +616,8 @@ int main()
             init_db(mysql);
             //load_dicts(mysql);
 
-            screen = new video_driver(480, 320, 32, 1); // debug purpose = 1 buffer, production value = 5
+            screen = new video_driver(480, 320, 5); // debug purpose = 1 buffer, production value = 5
             if (screen->get_last_error())
-
             {
                   printf("video_init error.\n");
                   return 1;
@@ -532,27 +630,23 @@ int main()
                   imin(CENTER_Y, screen->get_height() - CENTER_Y)
             ) - 20;
             circle_radius = min_fit / 5;
-
+            if (KeyboardMonitorInitialise())
+            {
+                  //  printf("input init error.\n");
+                   // return 1;
+            }
             zoom_changed(zoom_index);
 #if map_show==1
             next_map_update = utc_ms() - 1;
 #else
             cout << "Map draw disabled (#define map_show 0)" << endl;
 #endif
-
             video_loop_start();
-
             return 0;
-            //struct timespec t;            clock_start(t);
-
-
-            //clock_end(t);
-
       }
       catch (char * e) {
             cerr << "[EXCEPTION] " << e << endl;
             return false;
       }
-
       return 0;
 }

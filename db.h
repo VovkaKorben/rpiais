@@ -3,6 +3,7 @@
 #define __DB_H
 #include <vector>
 #include <map>
+
 #include <mysql.h>
 #include "mydefs.h"
 
@@ -21,16 +22,16 @@ private:
       std::vector<std::string> fields;
 
       const char * last_error_str;
-      int field_index(std::string field_name);
+      size_t field_index(std::string field_name);
 public:
       MYSQL * get_connection() { return connection; };
       const char * get_last_error_str() { return last_error_str; };
 
-      int get_myint(const int index);
+      int get_myint(const size_t index);
       int get_myint(const std::string field_name);
-      std::string get_mystr(const int index);
+      std::string get_mystr(const size_t index);
       std::string get_mystr(const std::string field_name);
-      double get_myfloat(const int index);
+      double get_myfloat(const size_t index);
       double get_myfloat(const std::string field_name);
 
       bool exec_file(const std::string filename);

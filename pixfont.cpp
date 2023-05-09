@@ -76,6 +76,7 @@ public:
 
 
 
+
 bitmap_font::bitmap_font(const char * filename)
 {
       //int32 w, h;
@@ -83,13 +84,13 @@ bitmap_font::bitmap_font(const char * filename)
       bmp_image bmp(filename);
       if (!bmp.is_loaded())
       {
-            cout << "Can't load bitmap font file " << filename << "\n";
+            std::cout << "Can't load bitmap font file " << filename << "\n";
             return;
       }
       int32 x = 0;
       uint8 p, prev = 0;
       count = 0;
-      vector<int32> pix_start;
+      std::vector<int32> pix_start;
       while (x < bmp.getw())
       {
             p = bmp.pix(x, bmp.geth() - 1);

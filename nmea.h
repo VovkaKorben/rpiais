@@ -11,6 +11,8 @@
 #include <chrono>
 #include <map>
 #include "mydefs.h"
+#include "ais_types.h"
+#include "pixfont.h"
 using namespace std;
 struct vdm_field
 {
@@ -37,53 +39,12 @@ extern map<int, vector<vdm_field> > vdm_defs;
 extern map<int, int> vdm_length;
 extern map<string, FnPtr> lut;
 
-
-
-struct own_vessel_class
+struct ship_mid_s
 {
-private:
-      // gps 2
-      // glonass 1
-      // prev pos 0
-      vector<floatpt> pos_arr;
-
-      int pos_priority;
-      void eval_pos() {
-            pos = pos_arr[pos_priority];
-            pos.latlon2meter();
-
-      }
-public:
-      floatpt pos;
-      bool pos_ok()
-      {
-            return pos_priority >= 0;
-      };
-      void set_pos(floatpt position, int priority)
-      {
-            pos_arr[priority] = position;
-            if (priority >= pos_priority)
-            {
-                  pos_priority = priority;
-                  eval_pos();
-            }
-
-      };
-
-      int heading;
-      bool relative;
-      own_vessel_class()
-      {
-            pos_arr.resize(3);
-            heading = 0;
-            relative = false;
-            pos_priority = -1;
-
-      }
-
-
+      std::string code, name;
+      image img{NULL};
 };
-extern own_vessel_class own_vessel;
+extern map<int, ship_mid_s> ship_mid_list;
 
 #define NMEA_GOOD 0x0000
 #define NMEA_EMPTY 0x0001
@@ -96,19 +57,9 @@ extern own_vessel_class own_vessel;
 #define NMEA_UNKNOWN_SENTENCE -1
 
 
-#define LAT_DEFAULT 0x3412140 
-#define LON_DEFAULT 0x6791AC0 
+//#define LAT_DEFAULT 0x3412140 #define LON_DEFAULT 0x6791AC0 
 
 
-
-extern map<int,vessel> vessels;
-
-struct satellite
-{
-      int snr, elevation, azimuth;
-      uint64_t last_access;
-};
-extern map<int, satellite> sattelites;
 
 
 

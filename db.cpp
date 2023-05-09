@@ -2,9 +2,11 @@
 #include <cstring>
 #include <string>
 #include <algorithm>
+#include  <stdint.h>
 #include "db.h"
 #include "mydefs.h"
 #include "nmea.h"
+#include "ais_types.h"
 
 
 
@@ -105,17 +107,19 @@ mysql_driver::mysql_driver(const char * host, const char * user, const char * pw
 mysql_driver::~mysql_driver() {
       mysql_close(connection);
 }
-int mysql_driver::field_index(const std::string field_name)
+size_t mysql_driver::field_index(const std::string field_name)
 {
-      auto it = find(fields.begin(), fields.end(), field_name);
 
-      // If element was found
-      if (it == fields.end())
-            return -1;
+      for (size_t i = 0; i < fields.size(); i++)
+      {
+            if (fields[i] == field_name)
+                  return i;
 
-      return it - fields.begin();
+      }
+      return SIZE_MAX;
+
 }
-int mysql_driver::get_myint(const int index)
+int mysql_driver::get_myint(const size_t index)
 {
       if (row[index] == nullptr)
             return 0;
@@ -128,12 +132,12 @@ int mysql_driver::get_myint(const int index)
 }
 int mysql_driver::get_myint(const std::string field_name)
 {
-      int index = field_index(field_name);
-      if (index == -1)
+      size_t index = field_index(field_name);
+      if (index == SIZE_MAX)
             throw std::runtime_error("field not found: " + field_name);
       return get_myint(index);
 }
-std::string mysql_driver::get_mystr(const int index)
+std::string mysql_driver::get_mystr(const size_t index)
 {
 
       size_t size = strlen(row[index]);
@@ -145,12 +149,12 @@ std::string mysql_driver::get_mystr(const int index)
 }
 std::string mysql_driver::get_mystr(const std::string field_name)
 {
-      int index = field_index(field_name);
-      if (index == -1)
+      size_t index = field_index(field_name);
+      if (index == SIZE_MAX)
             throw std::runtime_error("field not found: " + field_name);
       return get_mystr(index);
 }
-double mysql_driver::get_myfloat(const int index)
+double mysql_driver::get_myfloat(const size_t index)
 {
       if (row[index] == nullptr)
             return 0;
@@ -163,8 +167,8 @@ double mysql_driver::get_myfloat(const int index)
 }
 double mysql_driver::get_myfloat(const std::string field_name)
 {
-      int index = field_index(field_name);
-      if (index == -1)
+      size_t index = field_index(field_name);
+      if (index == SIZE_MAX)
             throw std::runtime_error("field not found: " + field_name);
       return get_myfloat(index);
 }
@@ -172,13 +176,7 @@ double mysql_driver::get_myfloat(const std::string field_name)
 int load_dicts(mysql_driver * driver)
 {
 
-      //int status;
-      //      unsigned long * length;
-      //std::string sq, nmea;
-
-      // load sentences 
-
-      sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear();
+      sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear(); ship_mid_list.clear();
       driver->exec_file("/home/pi/projects/rpiais/sql/readdicts.sql");
 
       int dict_index = 0;
@@ -189,48 +187,52 @@ int load_dicts(mysql_driver * driver)
 
             while (driver->fetch()) {
                   switch (dict_index) {
-                  case 0: {
-                        std::string  str_id = driver->get_mystr("id");
-                        std::transform(str_id.begin(), str_id.end(), str_id.begin(), ::toupper);
-                        if (lut.count(str_id) == 0)
-                              throw std::runtime_error("no handler for " + str_id);
-                        sentences.insert({ str_id, {
+                        case 0: {
+                              std::string  str_id = driver->get_mystr("id");
+                              std::transform(str_id.begin(), str_id.end(), str_id.begin(), ::toupper);
+                              if (lut.count(str_id) == 0)
+                                    throw std::runtime_error("no handler for " + str_id);
+                              sentences.insert({ str_id, {
+                                          driver->get_mystr("description"),
+                                          driver->get_myint("grouped"),
+                                          lut[str_id]
+                                          } });
+                              break;
+                        }
+                        case 1: // load talkers
+                        {
+                              std::string str_id = driver->get_mystr("id");
+                              talkers.insert({ str_id, {
                                     driver->get_mystr("description"),
-                                    driver->get_myint("grouped"),
-                                    lut[str_id]
+                                    driver->get_myint("obsolete"),
                                     } });
-                        break;
-                  }
-                  case 1: // load talkers
-                  {
-                        std::string str_id = driver->get_mystr("id");
-                        talkers.insert({ str_id, {
-                              driver->get_mystr("description"),
-                              driver->get_myint("obsolete"),
-                              } });
-                        break;
-                  }
-                  case 2: {
-                        vdm_length[driver->get_myint("id")] = driver->get_myint("len");
-                        break;
-                  }
-                  case 3: {
-                        int msg_id = driver->get_myint("msg_id");
-                        if (vdm_defs.count(msg_id) == 0)
-                              vdm_defs[msg_id] = {};
+                              break;
+                        }
+                        case 2: {
+                              vdm_length[driver->get_myint("id")] = driver->get_myint("len");
+                              break;
+                        }
+                        case 3: {
+                              int msg_id = driver->get_myint("msg_id");
+                              if (vdm_defs.count(msg_id) == 0)
+                                    vdm_defs[msg_id] = {};
 
-                        std::string fieldname = driver->get_mystr("ref"); // `ref` value
-                        std::transform(fieldname.begin(), fieldname.end(), fieldname.begin(), ::toupper);
-                        vdm_defs[msg_id].push_back({
-                              driver->get_myint("start"),// start
-                              driver->get_myint("len"),// len
-                              fieldname,
-                              driver->get_myint("type"),// type
-                              driver->get_myint("def"),// def
-                              driver->get_myint("exp"),// exp
-                                                   });
-                        break;
-                  }
+                              std::string fieldname = driver->get_mystr("ref"); // `ref` value
+                              std::transform(fieldname.begin(), fieldname.end(), fieldname.begin(), ::toupper);
+                              vdm_defs[msg_id].push_back({
+                                    driver->get_myint("start"),// start
+                                    driver->get_myint("len"),// len
+                                    fieldname,
+                                    driver->get_myint("type"),// type
+                                    driver->get_myint("def"),// def
+                                    driver->get_myint("exp"),// exp
+                                                         });
+                              break;
+                        }
+                        case 4: { // MID data
+
+                              break;
+                        }
 
                   }
                   putchar('\n');

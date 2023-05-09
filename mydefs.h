@@ -3,59 +3,60 @@
 #define __MYDEFS_H
 #include <string>
 #include <vector>
-#include<cmath>
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <ostream>
 #include <memory>
-#include <mysql.h>
+#include <cmath>
+//#include <mysql.h>
 
-#define own_mmsi 0
+#define PI 3.1415926535897932384626433832795
+#define PI180 PI/180.0
+#define RAD 180/PI
+#define EARTH_RADIUS 6371008.8 // used by haversine
+#define TO_RAD(x) (x)*PI180
+
+typedef signed char int8;
+typedef int8 * pint8;
+typedef unsigned char uint8;
+typedef uint8 * puint8;
+typedef char * pchar;
+
+typedef signed int int32;
+typedef unsigned int uint32;
+typedef unsigned int * puint32;
+typedef signed int * pint32;
+
+typedef unsigned short uint16;
+typedef unsigned short * puint16;
+typedef signed short int16;
+typedef signed short * pint16;
+
+typedef unsigned int ARGB;
 
 
 #ifdef __clang__ //clang_compiler
 #elif __GNUC__ //GNU_C_compiler
 
-#define PRAGMA(X) _Pragma(#X)
-#define WARN_OFF(n)     PRAGMA(pragma GCC diagnostic push)\
-PRAGMA(pragma GCC diagnostic ignored n)
-#define WARN_RESTORE       PRAGMA(pragma GCC diagnostic pop)
-
+#define WARN_FLOATCONVERSION_OFF _Pragma("GCC diagnostic push");\
+_Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"");
+#define WARN_CONVERSION_OFF _Pragma("GCC diagnostic push");\
+_Pragma("GCC diagnostic ignored \"-Wconversion\"");
+#define WARN_RESTORE _Pragma("GCC diagnostic pop")
 
 #elif _MSC_VER // MSVC
 #elif __BORLANDC__ //borland 
 #elif __MINGW32__ // mingw 
 #endif
-/*
-#define #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
-
-
-// Macro to define cursor lines
-#define CURSOR(top, bottom) (((top) << 8) | (bottom))
-
-// Macro to get a random integer with a specified range
-#define getrandom(min, max) \
-    ((rand()%(int)(((max) + 1)-(min)))+ (min))
-
-    */
 
 
 
 
 
-    //#include <mysql.h>
-using namespace std;
-//#include <mysql/jdbc.h>
-
-//typedef void (*frame_func)();
-
-
-
-//const int VIEW_WIDTH = 480;const int VIEW_HEIGHT = 320;
-
-
+    
+//using namespace std;
 inline int imin(int v1, int v2)
 {
       if (v1 < v2) return v1; else return v2;
@@ -71,40 +72,48 @@ inline int imax(int v1, int v2)
 
 
 
-#define PI 3.1415926535897932384626433832795
-#define PI180 1/PI*180.0
-#define RAD 180/PI
 
 
-typedef signed char int8;
-typedef int8 * pint8;
-typedef unsigned char uint8;
-typedef uint8 * puint8;
-typedef char * pchar;
+//using namespace std;
+typedef std::vector<std::string> StringArray;
+typedef std::vector<StringArray> StringArrayBulk;
 
-typedef signed int int32;
-typedef unsigned int uint32;
-typedef unsigned int * puint32;
-typedef signed int * pint32;
-
-typedef unsigned short uint16;
-typedef signed short int16;
-
-typedef unsigned int BGRA;
-//typedef unsigned long * argb_ptr;
-using namespace std;
-typedef vector<string> StringArray;
-typedef vector<StringArray> StringArrayBulk;
-
-inline bool is_zero(double v1) { return abs(v1) < 0.000001; }
+inline bool is_zero(double v1) { return std::abs(v1) < 0.000001; }
 inline int isign(double v) { if (v > 0.0)            return 1;      else if (v < 0.0)            return -1;      else return 0; };
 inline double dsign(double v) { if (v > 0.0)            return 1.0;      else if (v < 0.0)            return -1.0;      else return 0.0; };
 
+inline std::string dec2bin(uint32 v, int len = 0)
+{
+      std::string r = "";
+      int cnt = 0;
+      while (v)
+      {
+            if (v & 1)
+                  r = "1" + r;
+            else
+                  r = "0" + r;
+            v >>= 1;
+            cnt++;
+      }
+      if (len)
+      {
+            len -= cnt;
+            while (len--)
+                  r = "0" + r;
+      }
+      return r;
+}
+
+#ifdef __GNUC__ //GNU_C_compiler
 inline uint64_t utc_ms() {
       struct timespec t;
       clock_gettime(CLOCK_REALTIME, &t);
       return t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
+
+#endif
+
+
 struct  intpt
 {
       int x, y;
@@ -126,6 +135,8 @@ struct  intpt
 };
 struct  floatpt
 {
+
+
       double x, y;
       inline  void to_polar()
       {
@@ -159,9 +170,9 @@ struct  floatpt
       inline void latlon2meter() // in format(lon, lat)
       {
             x = (x * 20037508.34) / 180;
-            if (abs(y) >= 85.051129)
+            if (std::abs(y) >= 85.051129)
                   // The value 85.051129° is the latitude at which the full projected map becomes a square
-                  y = dsign(y) * abs(y) * 111.132952777;
+                  y = dsign(y) * std::abs(y) * 111.132952777;
             else
                   y = log(tan(((90 + y) * PI) / 360)) / (PI / 180);
             y = (y * 20037508.34) / 180;
@@ -170,6 +181,23 @@ struct  floatpt
       {
             x -= fp.x;
             y -= fp.y;
+      }
+      inline double haversine(floatpt fp)
+      {
+            double lat_delta = TO_RAD(fp.y - this->y),
+                  lon_delta = TO_RAD(fp.x - this->x),
+                  converted_lat1 = TO_RAD(this->y),
+                  converted_lat2 = TO_RAD(fp.y);
+
+            double a =
+                  pow(sin(lat_delta / 2), 2) + cos(converted_lat1) * cos(converted_lat2) * pow(sin(lon_delta / 2), 2);
+
+            double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+            double d = EARTH_RADIUS * c;
+
+            return d;
+
+
       }
       inline intpt to_int()
       {
@@ -214,7 +242,7 @@ struct frect {
 
 
 
-#pragma GCC diagnostic push)
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wreturn-type"
       double x1, y1, x2, y2;
       floatpt get_corner(int index)
@@ -240,11 +268,11 @@ template<typename ... Args> inline std::string string_format(const std::string &
       std::snprintf(buf.get(), size, format.c_str(), args ...);
       return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
 }
-inline string read_file(string filename) {
-      ifstream f(filename); //taking file as inputstream
-      string str;
+inline std::string read_file(std::string filename) {
+      std::ifstream f(filename); //taking file as inputstream
+      std::string str;
       if (f) {
-            ostringstream ss;
+            std::ostringstream ss;
             ss << f.rdbuf(); // reading data
             return ss.str();
       }
@@ -254,9 +282,9 @@ inline string read_file(string filename) {
             return NULL;
       }
 }
-inline vector<string> str_split(const char * str, char c = ',')
+inline std::vector<std::string> str_split(const char * str, char c = ',')
 {
-      vector<string> result;
+      std::vector<std::string> result;
 
       do
       {
@@ -265,112 +293,12 @@ inline vector<string> str_split(const char * str, char c = ',')
             while (*str != c && *str)
                   str++;
 
-            result.push_back(string(begin, str));
+            result.push_back(std::string(begin, str));
       } while (0 != *str++);
 
       return result;
 }
-struct poly {
 
-      int points_count;
-      floatpt * origin;
-      intpt * work;
-      uint64_t last_access;
-
-      int path_count;
-      frect bounds;
-      int * pathindex;
-
-      poly()
-      {
-            points_count = 0;
-      }
-};
-//struct myshape :poly
-//{
-//      unsigned int id;
-//
-//
-//};
-
-
-// FLAGS
-
-const uint32 VESSEL_X = 0x01;
-const uint32 VESSEL_Y = 0x02;
-const uint32 VESSEL_L = 0x04;
-const uint32 VESSEL_R = 0x08;
-const uint32 VESSEL_T = 0x10;
-const uint32 VESSEL_B = 0x20;
-const uint32 VESSEL_A = 0x40;
-const uint32 VESSEL_LRTB = VESSEL_L | VESSEL_R | VESSEL_T | VESSEL_B;
-const uint32 VESSEL_LRTBA = VESSEL_L | VESSEL_R | VESSEL_T | VESSEL_B | VESSEL_A;
-const uint32 VESSEL_XY = VESSEL_X | VESSEL_Y;
-const uint32 VESSEL_XYLRTBA = VESSEL_L | VESSEL_R | VESSEL_T | VESSEL_B | VESSEL_X | VESSEL_Y | VESSEL_A;
-#define NOSIZE_DIMENSION 10.0
-struct vessel:poly
-{
-public:
-      uint32  imo, accuracy, status, heading, shiptype, T, B, L, R;
-      double lat, lon, turn, speed, course;
-      string shipname, callsign;
-      uint32 flags;
-      poly figure;
-      //bool lat_ok, lon_ok, size_ok;
-      vessel()
-      {
-            flags = 0;
-            shipname = "";
-            last_access = utc_ms();
-
-            points_count = 0;
-            path_count = 1;
-            pathindex = new int[2];
-            pathindex[0] = 0;
-
-            // init size to 3*3 meters
-            set_points_count(4);
-            origin[0] = { -NOSIZE_DIMENSION / 2,-NOSIZE_DIMENSION / 2 };
-            origin[1] = { NOSIZE_DIMENSION / 2,-NOSIZE_DIMENSION / 2 };
-            origin[2] = { NOSIZE_DIMENSION / 2, NOSIZE_DIMENSION / 2 };
-            origin[3] = { -NOSIZE_DIMENSION / 2, NOSIZE_DIMENSION / 2 };
-      }
-      void size_changed() {
-            if (((flags & VESSEL_LRTB) == VESSEL_LRTB) && T != 0 && B != 0 && L != 0 && R != 0)
-            {
-                  double l = L, r = R, t = T, b = B;
-                  set_points_count(5);
-                  origin[0] = { t,(l + r) / 2 - r }; // bow center
-                  origin[1] = { (t + b) * 0.75 - b,l }; // bow left connector
-                  origin[2] = { -b, l }; // left bottom point
-                  origin[3] = { -b, -r }; // right bottom point
-                  origin[4] = { (t + b) * 0.75 - b,-r };// bow right connector
-            };
-      }
-      void set_points_count(int cnt)
-      {
-            if (points_count)
-            {
-                  delete[]origin;
-                  delete[]work;
-            };
-            points_count = cnt;
-            origin = new floatpt[cnt];
-            work = new intpt[cnt];
-            pathindex[1] = cnt;
-      }
-};
-
-
-
-
-inline void logtofile(string s, bool c = false) {
-      return;
-      std::ofstream outfile;
-
-      outfile.open("C:\\ais\\cpp\\AIS\\log.txt", std::ios_base::app); // append instead of overwrite
-      outfile << s;
-}
 
 
 

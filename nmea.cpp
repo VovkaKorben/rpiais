@@ -11,27 +11,23 @@
 
 
 
-double dm_s2deg(double dm_s)
-{
-      int	int_part = (int)trunc(dm_s);
-      return (int_part / 100 + (int_part % 100 + (dm_s - int_part)) / 60);
-}
 
 
-map<int, vector<vdm_field> > vdm_defs;
-map<int, int> vdm_length;
-map<int, vessel> vessels;
+
+std::map<int, vector<vdm_field> > vdm_defs;
+std::map<int, int> vdm_length;
+
 
 struct msg_bulk {
       size_t total;
-      map<int, StringArray> messages;
+      std::map<int, StringArray> messages;
       msg_bulk()
       {
             total = 0;
             messages.clear();
       };
 };
-typedef map<std::string, msg_bulk> groups;
+typedef std::map<std::string, msg_bulk> groups;
 groups buff;
 
 bool check_buff(std::string sentence, StringArray data, StringArrayBulk * bulk)
@@ -88,10 +84,13 @@ bool check_buff(std::string sentence, StringArray data, StringArrayBulk * bulk)
       else return false;
 }
 
-map<int, satellite> sattelites;
-own_vessel_class own_vessel;
 
 
+double dm_s2deg(double dm_s)
+{
+      int	int_part = (int)trunc(dm_s);
+      return (int_part / 100 + (int_part % 100 + (dm_s - int_part)) / 60);
+}
 bool parse_char(const std::string & s, char & c)
 {
       if (s.length() != 1)
@@ -189,18 +188,15 @@ int _gll(StringArrayBulk * data)
             {
                   // vessel * ownship = vessels.get_own();
                   char lon_dir, lat_dir;
+                  double lon, lat;
 
-                  if (parse_double(d->at(0), vessels[own_mmsi].lat) && parse_char(d->at(1), lat_dir))
+                  if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir) &&
+                      parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
                   {
                         if (lat_dir == 'S')
-                              vessels[own_mmsi].lat = -vessels[own_mmsi].lat;
-                        vessels[own_mmsi].flags |= VESSEL_Y;
-                  }
-                  if (parse_double(d->at(2), vessels[own_mmsi].lon) && parse_char(d->at(3), lon_dir))
-                  {
+                              lat = -lat;
                         if (lon_dir == 'W')
-                              vessels[own_mmsi].lon = -vessels[own_mmsi].lon;
-                        vessels[own_mmsi].flags |= VESSEL_X;
+                              lon = -lon;
                   }
                   return 0;
             }
@@ -216,18 +212,16 @@ int _rmc(StringArrayBulk * data)
             {
                   //vessel * ownship = vessels.get_own();
                   char lon_dir, lat_dir;
+                  double lon, lat;
 
-                  if (parse_double(d->at(0), vessels[own_mmsi].lat) && parse_char(d->at(1), lat_dir))
+                  if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir)
+                      && parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
                   {
                         if (lat_dir == 'S')
-                              vessels[own_mmsi].lat = -vessels[own_mmsi].lat;
-                        vessels[own_mmsi].flags |= VESSEL_Y;
-                  }
-                  if (parse_double(d->at(2), vessels[own_mmsi].lon) && parse_char(d->at(3), lon_dir))
-                  {
+                              lat = -lat;
                         if (lon_dir == 'W')
-                              vessels[own_mmsi].lon = -vessels[own_mmsi].lon;
-                        vessels[own_mmsi].flags |= VESSEL_X;
+                              lon = -lon;
+
                   }
                   return 0;
             }
@@ -267,6 +261,29 @@ int _gsv(StringArrayBulk * data)
       }
       return 0;
 }
+// jump table for VDM fields
+enum class field_indexes
+{
+      mmsi, lat, lon, sog, cog, left, right, top,
+      bottom, shiptype, shipname, imo, callsign, hdg
+};
+std::map<std::string, field_indexes> vdm_case_lut = {
+    { "MMSI", field_indexes::mmsi },
+    { "LAT", field_indexes::lat },
+    { "LON", field_indexes::lon },
+    { "SOG", field_indexes::sog },
+    { "COG", field_indexes::cog },
+    { "HDG", field_indexes::hdg },
+    { "SHIPTYPE", field_indexes::shiptype },
+    { "SHIPNAME", field_indexes::shipname },
+    { "IMO", field_indexes::imo },
+    { "CALLSIGN", field_indexes::callsign },
+    { "TO_BOW", field_indexes::top },
+    { "TO_STERN", field_indexes::bottom },
+    { "TO_PORT", field_indexes::left },
+    { "TO_STARBOARD", field_indexes::right },
+};
+
 int _vdm(StringArrayBulk * data)
 {
       bitcollector bc;
@@ -322,14 +339,18 @@ int _vdm(StringArrayBulk * data)
       }
 
       // parsing fields
-      int32 mmsi;
+      int32 mmsi, pos_collect = 0, size_collect = 0;
       vessel * v = nullptr;
 
       for (vdm_field f : vdm_defs[msg_id])
       {
-            //cout << f.field_name << endl;
+            if (vdm_case_lut.count(f.field_name) == 0)
+                  throw "unkn field";
 
-            if (f.field_name == "MMSI")
+            field_indexes field_index = vdm_case_lut[f.field_name];
+            switch (field_index)
+            {
+            case field_indexes::mmsi:
             {
                   mmsi = bc.get_int(&f);
                   if (vessels.count(mmsi) == 0) // add a new
@@ -337,92 +358,112 @@ int _vdm(StringArrayBulk * data)
                         vessels.emplace(mmsi, vessel());
                   }
                   v = &vessels[mmsi];
-
+                  v->eval_mid(mmsi);
+                  break;
             }
-            else if (v != nullptr)
+            case field_indexes::lat:
             {
-
-                  if (f.field_name == "LAT")
+                  int t = bc.get_int(&f);
+                  if (t != 0x3412140) // magic nmea number, mean `LAT not available`
                   {
-                        int t = bc.get_int(&f);
-                        if (t != LAT_DEFAULT)
-                        {
-                              v->lat = t / 600000.0;
-                              v->flags |= VESSEL_Y;
-                        }
+                        v->gps.y = t / 600000.0;
+                        pos_collect |= 0x01;
                   }
-                  else
-                        if (f.field_name == "LON")
-                        {
-                              int t = bc.get_int(&f);
-                              if (t != LON_DEFAULT)
-                              {
-                                    v->lon = t / 600000.0;
-                                    v->flags |= VESSEL_X;
-                              }
-                        }
-                        else
-                              if (f.field_name == "IMO")
-                                    v->imo = bc.get_int(&f);
-                              else
-                                    if (f.field_name == "CALLSIGN")
-                                          v->callsign = bc.get_string(&f);
-                                    else
-                                          if (f.field_name == "SHIPNAME")
-                                                v->shipname = bc.get_string(&f);
-                                          else
-                                                if (f.field_name == "SHIPTYPE")
-                                                      v->shiptype = bc.get_int(&f);
-                                                else
-                                                      if (f.field_name == "TO_BOW")
-                                                      {
-                                                            v->T = bc.get_int(&f);
-                                                            v->flags |= VESSEL_T;
-                                                            v->size_changed();
-                                                      }
-                                                      else
-                                                            if (f.field_name == "TO_STERN")
-                                                            {
-                                                                  v->B = bc.get_int(&f);
-                                                                  v->flags |= VESSEL_B;
-                                                                  v->size_changed();
-                                                            }
-                                                            else
-                                                                  if (f.field_name == "TO_PORT")
-                                                                  {
-                                                                        v->L = bc.get_int(&f);
-                                                                        v->flags |= VESSEL_L;
-                                                                        v->size_changed();
-                                                                  }
-                                                                  else
-                                                                        if (f.field_name == "TO_STARBOARD")
-                                                                        {
-                                                                              v->R = bc.get_int(&f);
-                                                                              v->flags |= VESSEL_R;
-                                                                              v->size_changed();
-                                                                        }
-                                                                        else
-                                                                              if (f.field_name == "SOG")
-                                                                                    v->speed = bc.get_double(&f);
-                                                                              else
-                                                                                    if (f.field_name == "COG")
-                                                                                          v->course = bc.get_double(&f);
-                                                                                    else
-                                                                                          if (f.field_name == "HDG")
-                                                                                          {
-                                                                                                v->heading = bc.get_int(&f);
-                                                                                                v->flags |= VESSEL_A;
-                                                                                          }
-                                                                                          else
-                                                                                                cout << "No handler for field: " << f.field_name << endl;
+                  break;
             }
+            case field_indexes::lon:
+            {
+                  int t = bc.get_int(&f);
+                  if (t != 0x6791AC0)// magic nmea number, mean `LON not available`
+                  {
+                        v->gps.x = t / 600000.0;
+                        pos_collect |= 0x02;
+                  }
+                  break;
+            }
+            case field_indexes::imo:
+            {
+                  v->imo = bc.get_int(&f); break;
+            }
+            case field_indexes::callsign:
+            {
+                  v->callsign = bc.get_string(&f); break;
+            }
+            case field_indexes::shipname:
+            {
+                  v->shipname = bc.get_string(&f); break;
+            }
+            case field_indexes::shiptype:
+            {
+                  v->shiptype = bc.get_int(&f); break;
+            }
+            case field_indexes::top:
+            {
+                  v->top = bc.get_int(&f);
+                  if (v->top != 0)
+                        size_collect |= 0x01;
+                  break;
+            }
+            case field_indexes::bottom:
+            {
+                  v->bottom = bc.get_int(&f);
+                  if (v->bottom != 0)
+                        size_collect |= 0x02;
+                  break;
+            }
+            case field_indexes::left:
+            {
+                  v->left = bc.get_int(&f);
+                  if (v->left != 0)
+                        size_collect |= 0x04;
+                  break;
+            }
+            case field_indexes::right:
+            {
+                  v->right = bc.get_int(&f);
+                  if (v->right != 0)
+                        size_collect |= 0x08;
+                  break;
+            }
+            case field_indexes::sog:
+            {
+                  v->speed = bc.get_double(&f);
+                  break;
+            }
+            case field_indexes::cog:
+            {
+                  v->course = bc.get_double(&f);
+                  break;
+            }
+            case field_indexes::hdg:
+            {
+                  v->heading = bc.get_int(&f);
+                  v->angle_ok = (v->heading != 511);
+                  break;
+            }
+            } // switch
+
+
+
       }
+      if (!v->size_ok) {
+            v->size_ok = (size_collect == 0x0F);
+            if (v->size_ok)
+                  v->size_changed();
+      }
+      v->pos_ok = (pos_collect == 0x03);
+      if (v->pos_ok)
+      {
+            //v->meters = { v->lon,v->lat };
+            //v->meters.latlon2meter();
+      }
+
       return 0;
 }
 
-map<std::string, nmea_talker> talkers;
-map<std::string, nmea_sentence> sentences;
-map<std::string, FnPtr> lut = {
+std::map<std::string, nmea_talker> talkers;
+std::map<std::string, nmea_sentence> sentences;
+std::map<std::string, FnPtr> lut = {
       {"GGA",_gga},
       {"GSA",_gsa},
       {"RMC",_rmc},
