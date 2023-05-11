@@ -13,38 +13,39 @@
 #include "mydefs.h"
 #include "ais_types.h"
 #include "pixfont.h"
-using namespace std;
+
 struct vdm_field
 {
       int start, len;
-      string field_name;
+      std::string field_name;
       int type, def, exp;
 };
 typedef int (*FnPtr)(StringArrayBulk * data);
 struct nmea_sentence
 {
-      string description;
+      std::string description;
       int  grouped;
       FnPtr handler;
 };
 struct nmea_talker
 {
-      string description;
+      std::string description;
       int obsolete;
 
 };
-extern map<string, nmea_talker> talkers;
-extern map<string, nmea_sentence> sentences;
-extern map<int, vector<vdm_field> > vdm_defs;
-extern map<int, int> vdm_length;
-extern map<string, FnPtr> lut;
+extern std::map<std::string, nmea_talker> talkers;
+extern std::map<std::string, nmea_sentence> sentences;
+extern std::map<int, std::vector<vdm_field> > vdm_defs;
+extern std::map<int, int> vdm_length;
+extern std::map<std::string, FnPtr> lut;
 
-struct ship_mid_s
+struct mid_struct
 {
-      std::string code, name;
-      image img{NULL};
+      std::string code, country;
 };
-extern map<int, ship_mid_s> ship_mid_list;
+
+extern std::map<int, mid_struct> mid_list;
+extern std::map<std::string, image> mid_country;
 
 #define NMEA_GOOD 0x0000
 #define NMEA_EMPTY 0x0001
@@ -69,10 +70,10 @@ extern map<int, ship_mid_s> ship_mid_list;
 
 
 
-unsigned int parse_nmea(string nmea_str);
-bool parse_char(const string & s, char & c);
-bool parse_int(const string & s, int & i);
-bool parse_double(const string & s, double & f);
+unsigned int parse_nmea(std::string nmea_str);
+bool parse_char(const std::string & s, char & c);
+bool parse_int(const std::string & s, int & i);
+bool parse_double(const std::string & s, double & f);
 
 #define bitcollector_buff_len 150
 #define bitcollector_buff_bits bitcollector_buff_len*8
@@ -87,7 +88,7 @@ private:
       int get_char_index(char c);
 public:
       void add_bits(uint32 data, int32 data_len);
-      void add_string(string data, size_t str_len);
+      void add_string(std::string data, size_t str_len);
       int get_len();
       uint32 get_raw(const int32 start, const int32 len);
       int32 get_int(const vdm_field * f);

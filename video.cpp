@@ -76,7 +76,7 @@ video_driver::video_driver(int _width, int _height, int _buffer_count) {
       vinfo.yres_virtual = height * buffer_count; // double the physical
       vinfo.bits_per_pixel = bpp;
       if (ioctl(fbdev, FBIOPUT_VSCREENINFO, &vinfo)) {
-            printf("Error setting variable information.\n");
+            printf("video_driver init: Error setting variable information.\n");
       }
 
       if (ioctl(fbdev, FBIOGET_FSCREENINFO, &finfo)) { last_error = FB_GET_FSCREENINFO_FAILED; return; }
@@ -248,6 +248,45 @@ void video_driver::draw_polyline(int x, int y, const ARGB color, int close_polyl
                         prev_y = y;
                         count++;
                   }
+}
+void video_driver::draw_image(image * img, int x, int y, int flags, int transparency)
+{
+      if (!img->is_loaded()) return;
+      if (transparency == 0) return; // nothing draw with zero transparency
+      if ((flags & HALIGN_CENTER) == HALIGN_CENTER)            x -= img->width() / 2;
+      else if ((flags & HALIGN_RIGHT) == HALIGN_RIGHT)            x -= img->width();
+
+      if ((flags & VALIGN_CENTER) == VALIGN_CENTER)            y += img->height() / 2;
+      else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)            y += img->height();
+      WARN_FLOATCONVERSION_OFF
+            WARN_CONVERSION_OFF
+            // transparency = 255- transparency ;
+            puint8 src = img->data_ptr();
+      PIX_PTR dst_start = fb_current + (height - y - 1) * width + x,
+            dst_current;
+      uint8 r, g, b;
+      float a, ia;
+      int tx, ty = img->height();
+
+      while (ty--)
+      {
+            dst_current = dst_start;
+            tx = img->width();
+            while (tx--)
+            {
+                  a = ((*(src + 3)) * transparency) / 65025.0f, ia = 1.0f - a;
+
+                  r = (*src) * a + ((*dst_current >> 8) & 0xF8) * ia; src++;
+                  g = (*src) * a + ((*dst_current >> 3) & 0xFC) * ia; src++;
+                  b = (*src) * a + ((*dst_current << 3) & 0xF8) * ia; src += 2;
+                  // combine colors
+                  *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); dst_current++;
+            }
+            dst_start += width; // proceed to next line
+      }
+      WARN_RESTORE
+            WARN_RESTORE
+
 }
 void video_driver::draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags)
 {

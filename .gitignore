@@ -369,3 +369,11 @@ FodyWeavers.xsd
 /readme
 /key_test
 *.sh
+/img/flags
+/img/speccy.bmp
+/img/plus.png
+/img/minus.png
+/img/font.bmp
+/img/test2.png
+/img/test.png
+/img/speccy.psd

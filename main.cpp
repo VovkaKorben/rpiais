@@ -22,8 +22,9 @@ uint64_t next_map_update;
 #endif
 
 int min_fit, circle_radius;
+image * img_minus, * img_plus;
 int last_msg_id = 1;// 111203 - 1;
-map <int, poly>  shapes;
+std::map <int, poly>  shapes;
 
 //using namespace std;
 video_driver * screen;
@@ -142,7 +143,7 @@ int load_shapes()
       int shapes_total = 0, points_total = 0;
 
       // create string with existing id's
-      stringstream sstr;
+      std::stringstream sstr;
 
       if (shapes.size()) {
             int total = 0;
@@ -240,8 +241,8 @@ int load_shapes()
       mysql->free_result();
       mysql->has_next();
 
-      cout << "Shapes loaded: " << shapes_total << endl;
-      cout << "Points added: " << points_total << endl;
+      std::cout << "Shapes loaded: " << shapes_total << std::endl;
+      std::cout << "Points added: " << points_total << std::endl;
       return 0;
 }
 uint64_t  update_map_data(uint64_t next_check)
@@ -269,7 +270,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
       const vessel * v;
       floatpt vessel_center, fp;
       intpt int_center;
-      int circle_size = max(int(6 * zoom), 3);
+      int circle_size = std::max(int(6 * zoom), 3);
       for (const auto & vx : vessels)
       {
             //printf("lat lon: %.12f,%.12f\n", v.lat, v.lon);
@@ -371,7 +372,7 @@ void draw_grid(double angle)
 
       floatpt fp;
       //const string sides = "ESWN";
-      const string sides = " S N";
+      const std::string sides = " S N";
       for (int s = 0; s < 4; s++)
       {
             // axis
@@ -390,7 +391,7 @@ void draw_grid(double angle)
             if (angle >= 360.0) angle -= 360.0;
       }
       int v;
-      string s;
+      std::string s;
       for (int i = 1; i < 6; i++)
       {
             // distance circle
@@ -405,7 +406,7 @@ void draw_grid(double angle)
                   s = string_format("%d.%d", v / 1000, v % 1000);
             else
                   s = string_format("%d", v);
-            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), s, 0x0, HALIGN_CENTER | VALIGN_CENTER);
+            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), s, 0x0000FF, HALIGN_CENTER | VALIGN_CENTER);
       }
 
 }
@@ -415,8 +416,8 @@ struct less_than_key
       inline bool operator() (const int & mmsi0, const int & mmsi1)
       {
             double d0 = vessels[mmsi0].distance, d1 = vessels[mmsi1].distance;
-            if (isnan(d0)) return false;
-            else if (isnan(d1)) return true;
+            if (std::isnan(d0)) return false;
+            else if (std::isnan(d1)) return true;
             else return d0 < d1;
 
       }
@@ -440,13 +441,14 @@ void draw_vessels_info() {
       }
 
       std::sort(mmsi.begin(), mmsi.end(), less_than_key());
-      int lines_count = min((int)mmsi.size(), 10);
+      int lines_count = std::min((int)mmsi.size(), 10);
       int y_coord;
       for (int i = 0; i < lines_count; i++)
       {
             y_coord = screen->get_height() - 5 - i * 10;
+            
             screen->draw_text(SPECCY_FONT, left + 5, y_coord, string_format("%d", mmsi[i]), 0x00000000, VALIGN_TOP | HALIGN_LEFT);
-            screen->draw_text(SPECCY_FONT, left + 105, y_coord, string_format("%.3f", vessels[mmsi[i]].distance), 0x00000000, VALIGN_TOP | HALIGN_LEFT);
+            screen->draw_text(SPECCY_FONT, screen->get_width()-5, y_coord, string_format("%d", vessels[mmsi[i]].distance), 0x00000000, VALIGN_TOP | HALIGN_RIGHT);
       }
 
       //for (int y = 5; y < screen->get_height(); y += 10)
@@ -503,8 +505,12 @@ void draw_frame()
       draw_text(small_font, 5, VIEW_HEIGHT - 40, string_format("Mouse: %d x %d", mouse_pos.x, mouse_pos.y), 0x000000);
       draw_text(small_font, 5, VIEW_HEIGHT - 50, fps, 0x000000);
       */
-
-
+      screen->draw_image(img_minus, 0, screen->get_height() - 1, HALIGN_LEFT | VALIGN_TOP);
+      screen->draw_image(img_plus, screen->get_width() / 3 * 2, screen->get_height() - 1, HALIGN_RIGHT | VALIGN_TOP);
+     /* screen->draw_image(img_test,20, screen->get_height() - 10, HALIGN_LEFT | VALIGN_TOP);
+      screen->draw_image(img_test, 100, screen->get_height() - 100, HALIGN_LEFT | VALIGN_TOP,140);
+      screen->draw_image(img_test, 130, screen->get_height() - 30, HALIGN_LEFT | VALIGN_TOP,70);*/
+      
 }
 ////////////////////////////////////////////////////////////
 
@@ -609,14 +615,14 @@ int main()
       try {
             mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
             if (mysql->get_last_error_str()) {
-                  printf("mysql init error.\n%s\n");
+                  printf("mysql init error.\n%s\n", mysql->get_last_error_str());
                   return 1;
 
             }
             init_db(mysql);
             //load_dicts(mysql);
 
-            screen = new video_driver(480, 320, 5); // debug purpose = 1 buffer, production value = 5
+            screen = new video_driver(480, 320,5); // debug purpose = 1 buffer, production value = 5
             if (screen->get_last_error())
             {
                   printf("video_init error.\n");
@@ -624,6 +630,9 @@ int main()
             }
             screen->load_font(NORMAL_FONT, "/home/pi/projects/rpiais/font.bmp");
             screen->load_font(SPECCY_FONT, "/home/pi/projects/rpiais/speccy.bmp");
+            img_minus = new image("/home/pi/projects/rpiais/img/minus.png");
+            img_plus = new image("/home/pi/projects/rpiais/img/plus.png");
+           // img_test = new image("/home/pi/projects/rpiais/img/test3.png");
 
             min_fit = imin(
                   imin(CENTER_X, screen->get_width() - CENTER_X),
@@ -639,13 +648,13 @@ int main()
 #if map_show==1
             next_map_update = utc_ms() - 1;
 #else
-            cout << "Map draw disabled (#define map_show 0)" << endl;
+            std::cout << "Map draw disabled (#define map_show 0)" << std::endl;
 #endif
             video_loop_start();
             return 0;
       }
       catch (char * e) {
-            cerr << "[EXCEPTION] " << e << endl;
+            std::cerr << "[EXCEPTION] " << e << std::endl;
             return false;
       }
       return 0;

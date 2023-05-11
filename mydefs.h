@@ -10,6 +10,7 @@
 #include <ostream>
 #include <memory>
 #include <cmath>
+#include <sys/stat.h>
 //#include <mysql.h>
 
 #define PI 3.1415926535897932384626433832795
@@ -55,7 +56,7 @@ _Pragma("GCC diagnostic ignored \"-Wconversion\"");
 
 
 
-    
+
 //using namespace std;
 inline int imin(int v1, int v2)
 {
@@ -110,7 +111,10 @@ inline uint64_t utc_ms() {
       clock_gettime(CLOCK_REALTIME, &t);
       return t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
-
+inline bool file_exists(const std::string & name) {
+      struct stat buffer;
+      return (stat(name.c_str(), &buffer) == 0);
+}
 #endif
 
 
@@ -182,7 +186,7 @@ struct  floatpt
             x -= fp.x;
             y -= fp.y;
       }
-      inline double haversine(floatpt fp)
+      inline int haversine(floatpt fp)
       {
             double lat_delta = TO_RAD(fp.y - this->y),
                   lon_delta = TO_RAD(fp.x - this->x),
@@ -193,9 +197,9 @@ struct  floatpt
                   pow(sin(lat_delta / 2), 2) + cos(converted_lat1) * cos(converted_lat2) * pow(sin(lon_delta / 2), 2);
 
             double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-            double d = EARTH_RADIUS * c;
+            //double d = EARTH_RADIUS * c;
 
-            return d;
+            return int(EARTH_RADIUS * c);
 
 
       }
@@ -248,10 +252,10 @@ struct frect {
       floatpt get_corner(int index)
       {
             switch (index) {
-            case 0:	return floatpt{ x1, y1 };
-            case 1:	return floatpt{ x2,y1 };
-            case 2:	return floatpt{ x2,y2 };
-            case 3:	return floatpt{ x1,y2 };
+                  case 0:	return floatpt{ x1, y1 };
+                  case 1:	return floatpt{ x2,y1 };
+                  case 2:	return floatpt{ x2,y2 };
+                  case 3:	return floatpt{ x1,y2 };
             }
       }
 

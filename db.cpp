@@ -12,7 +12,7 @@
 
 std::string read_text(std::string filename)
 {
-      ifstream f(filename, std::ifstream::binary);
+      std::ifstream f(filename, std::ifstream::binary);
       if (!f) return "";
       std::stringstream buffer;
       buffer << f.rdbuf();
@@ -175,8 +175,7 @@ double mysql_driver::get_myfloat(const std::string field_name)
 
 int load_dicts(mysql_driver * driver)
 {
-
-      sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear(); ship_mid_list.clear();
+      sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear(); mid_list.clear(); mid_country.clear();
       driver->exec_file("/home/pi/projects/rpiais/sql/readdicts.sql");
 
       int dict_index = 0;
@@ -230,6 +229,23 @@ int load_dicts(mysql_driver * driver)
                               break;
                         }
                         case 4: { // MID data
+
+                              //std::map<int, mid_struct> mid_list;
+                              //std::map<std::string, image> mid_country;
+
+
+                              int mid = driver->get_myint("mid");
+                              mid_struct mid_s;
+                              mid_s.code = driver->get_mystr("abbr");
+                              mid_s.country = driver->get_mystr("country");
+                              mid_list.insert({ mid, mid_s });
+
+                              std::string filename = string_format("/home/pi/projects/rpiais/img/flags/%s.png", mid_s.code.c_str());
+                              if (file_exists(filename))
+                                    mid_country.insert({ mid_s.code, image(filename) });
+                              else
+                                    std::cout << "File not found: " << filename.c_str() << std::endl;
+
 
                               break;
                         }

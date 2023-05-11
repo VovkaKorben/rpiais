@@ -93,6 +93,7 @@ public:
       void draw_pix(const int x, const int y, const ARGB color);
       void draw_shape(const poly * sh, const ARGB fill_color, const ARGB outline_color);
       void draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags = VALIGN_BOTTOM | HALIGN_LEFT);
+      void draw_image(image * img, int x, int y,  int flags , int transparency = 255); // 255 mean full visible, 0 mean none visible
       void draw_circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill);
       void draw_bg(const ARGB color);
 };

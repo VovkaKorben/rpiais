@@ -14,9 +14,11 @@
 
 
 
-std::map<int, vector<vdm_field> > vdm_defs;
+std::map<int, std::vector<vdm_field> > vdm_defs;
 std::map<int, int> vdm_length;
 
+std::map<int, mid_struct> mid_list;
+std::map<std::string, image> mid_country;
 
 struct msg_bulk {
       size_t total;
@@ -53,7 +55,7 @@ bool check_buff(std::string sentence, StringArray data, StringArrayBulk * bulk)
       }
 
       // check group exists, create if not
-      string group_name = string_format("%s_%d", sentence, group_id);
+      std::string group_name = string_format("%s_%d", sentence, group_id);
       if (buff.count(group_name) == 0)
       {
             msg_bulk group;
@@ -244,7 +246,7 @@ int _gsv(StringArrayBulk * data)
             else {
                   if (sat_count != tmp_count)
                   {
-                        cout << "warn satellites count differ" << endl;
+                        std::cout << "warn satellites count differ" << std::endl;
                   }
             }
             pos = 1;
@@ -300,7 +302,7 @@ int _vdm(StringArrayBulk * data)
                   if (channel != test_channel)
                   {
                         // warn channel differs in one group
-                        cout << "warn channel differs in one group" << endl;
+                        std::cout << "warn channel differs in one group" << std::endl;
                         //print_data(data);				system("pause");
                         return -1;
                   }
@@ -321,19 +323,19 @@ int _vdm(StringArrayBulk * data)
       //cout << string_format("msg id: %d", msg_id) << endl;
       if (vdm_length.count(msg_id) == 0)
       {
-            cout << "Unkn msg len, id: " << msg_id << endl;
+            std::cout << "Unkn msg len, id: " << msg_id << std::endl;
 
             return -1;
       }
       else
             if (vdm_length[msg_id] != 0 && vdm_length[msg_id] != bc.get_len())
             {
-                  cout << string_format("Invalid msg #%d len, %d expect, %d got.", msg_id, vdm_length[msg_id], bc.get_len()) << endl;
+                  std::cout << string_format("Invalid msg #%d len, %d expect, %d got.", msg_id, vdm_length[msg_id], bc.get_len()) << std::endl;
                   return -1;
             }
       if (vdm_defs.count(msg_id) == 0)
       {
-            cout << string_format("No fields defined for msg #%d", msg_id) << endl;
+            std::cout << string_format("No fields defined for msg #%d", msg_id) << std::endl;
 
             return -1;
       }
@@ -350,97 +352,97 @@ int _vdm(StringArrayBulk * data)
             field_indexes field_index = vdm_case_lut[f.field_name];
             switch (field_index)
             {
-            case field_indexes::mmsi:
-            {
-                  mmsi = bc.get_int(&f);
-                  if (vessels.count(mmsi) == 0) // add a new
+                  case field_indexes::mmsi:
                   {
-                        vessels.emplace(mmsi, vessel());
+                        mmsi = bc.get_int(&f);
+                        if (vessels.count(mmsi) == 0) // add a new
+                        {
+                              vessels.emplace(mmsi, vessel());
+                        }
+                        v = &vessels[mmsi];
+                        v->eval_mid(mmsi);
+                        break;
                   }
-                  v = &vessels[mmsi];
-                  v->eval_mid(mmsi);
-                  break;
-            }
-            case field_indexes::lat:
-            {
-                  int t = bc.get_int(&f);
-                  if (t != 0x3412140) // magic nmea number, mean `LAT not available`
+                  case field_indexes::lat:
                   {
-                        v->gps.y = t / 600000.0;
-                        pos_collect |= 0x01;
+                        int t = bc.get_int(&f);
+                        if (t != 0x3412140) // magic nmea number, mean `LAT not available`
+                        {
+                              v->gps.y = t / 600000.0;
+                              pos_collect |= 0x01;
+                        }
+                        break;
                   }
-                  break;
-            }
-            case field_indexes::lon:
-            {
-                  int t = bc.get_int(&f);
-                  if (t != 0x6791AC0)// magic nmea number, mean `LON not available`
+                  case field_indexes::lon:
                   {
-                        v->gps.x = t / 600000.0;
-                        pos_collect |= 0x02;
+                        int t = bc.get_int(&f);
+                        if (t != 0x6791AC0)// magic nmea number, mean `LON not available`
+                        {
+                              v->gps.x = t / 600000.0;
+                              pos_collect |= 0x02;
+                        }
+                        break;
                   }
-                  break;
-            }
-            case field_indexes::imo:
-            {
-                  v->imo = bc.get_int(&f); break;
-            }
-            case field_indexes::callsign:
-            {
-                  v->callsign = bc.get_string(&f); break;
-            }
-            case field_indexes::shipname:
-            {
-                  v->shipname = bc.get_string(&f); break;
-            }
-            case field_indexes::shiptype:
-            {
-                  v->shiptype = bc.get_int(&f); break;
-            }
-            case field_indexes::top:
-            {
-                  v->top = bc.get_int(&f);
-                  if (v->top != 0)
-                        size_collect |= 0x01;
-                  break;
-            }
-            case field_indexes::bottom:
-            {
-                  v->bottom = bc.get_int(&f);
-                  if (v->bottom != 0)
-                        size_collect |= 0x02;
-                  break;
-            }
-            case field_indexes::left:
-            {
-                  v->left = bc.get_int(&f);
-                  if (v->left != 0)
-                        size_collect |= 0x04;
-                  break;
-            }
-            case field_indexes::right:
-            {
-                  v->right = bc.get_int(&f);
-                  if (v->right != 0)
-                        size_collect |= 0x08;
-                  break;
-            }
-            case field_indexes::sog:
-            {
-                  v->speed = bc.get_double(&f);
-                  break;
-            }
-            case field_indexes::cog:
-            {
-                  v->course = bc.get_double(&f);
-                  break;
-            }
-            case field_indexes::hdg:
-            {
-                  v->heading = bc.get_int(&f);
-                  v->angle_ok = (v->heading != 511);
-                  break;
-            }
+                  case field_indexes::imo:
+                  {
+                        v->imo = bc.get_int(&f); break;
+                  }
+                  case field_indexes::callsign:
+                  {
+                        v->callsign = bc.get_string(&f); break;
+                  }
+                  case field_indexes::shipname:
+                  {
+                        v->shipname = bc.get_string(&f); break;
+                  }
+                  case field_indexes::shiptype:
+                  {
+                        v->shiptype = bc.get_int(&f); break;
+                  }
+                  case field_indexes::top:
+                  {
+                        v->top = bc.get_int(&f);
+                        if (v->top != 0)
+                              size_collect |= 0x01;
+                        break;
+                  }
+                  case field_indexes::bottom:
+                  {
+                        v->bottom = bc.get_int(&f);
+                        if (v->bottom != 0)
+                              size_collect |= 0x02;
+                        break;
+                  }
+                  case field_indexes::left:
+                  {
+                        v->left = bc.get_int(&f);
+                        if (v->left != 0)
+                              size_collect |= 0x04;
+                        break;
+                  }
+                  case field_indexes::right:
+                  {
+                        v->right = bc.get_int(&f);
+                        if (v->right != 0)
+                              size_collect |= 0x08;
+                        break;
+                  }
+                  case field_indexes::sog:
+                  {
+                        v->speed = bc.get_double(&f);
+                        break;
+                  }
+                  case field_indexes::cog:
+                  {
+                        v->course = bc.get_double(&f);
+                        break;
+                  }
+                  case field_indexes::hdg:
+                  {
+                        v->heading = bc.get_int(&f);
+                        v->angle_ok = (v->heading != 511);
+                        break;
+                  }
             } // switch
 
 
@@ -484,7 +486,7 @@ unsigned int parse_nmea(std::string nmea_str)
 
       // process asterisk
       size_t  asterisk_pos = nmea_str.find_first_of('*');
-      if (asterisk_pos == string::npos)
+      if (asterisk_pos == std::string::npos)
             return (r | NMEA_NO_ASTERISK);
       if (asterisk_pos >= (nmea_str.length() - 2))
             return (r | NMEA_NO_CHECKSUM);
@@ -494,7 +496,7 @@ unsigned int parse_nmea(std::string nmea_str)
       size_t pos = 1;
       while (pos < asterisk_pos)
             cs ^= nmea_str[pos++];
-      string calculated_cs = string_format("%.2X", cs),
+      std::string calculated_cs = string_format("%.2X", cs),
             origin_cs = nmea_str.substr(asterisk_pos + 1, 2);
       if (calculated_cs != origin_cs)
             r |= NMEA_BAD_CHECKSUM;
@@ -507,11 +509,11 @@ unsigned int parse_nmea(std::string nmea_str)
             return NMEA_NO_DATA;
 
       // extract header
-      string header = data[0];
+      std::string header = data[0];
       std::transform(header.begin(), header.end(), header.begin(), ::toupper);
 
       // extract talker and sentence from header
-      string _sentence = header.substr(header.length() - 3, 3),
+      std::string _sentence = header.substr(header.length() - 3, 3),
             _talker = header.substr(0, header.length() - 3);
       if (talkers.count(_talker) == 0)
             r |= NMEA_UNKNOWN_TALKER;
@@ -571,7 +573,7 @@ void bitcollector::add_bits(uint32 data, int32 data_len)
       uint32 test_bit = 1 << data_len;
       if (data >= test_bit)
       {
-            cout << string_format("bitcollector->add_bits, value %d (%.2f bits) exceeds size maximum allowed %d (%d bits)", data, log2(data), test_bit - 1, data_len) << "\n";
+            std::cout << string_format("bitcollector->add_bits, value %d (%.2f bits) exceeds size maximum allowed %d (%d bits)", data, log2(data), test_bit - 1, data_len) << "\n";
       }
 
       test_bit >>= 1;

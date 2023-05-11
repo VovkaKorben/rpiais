@@ -34,7 +34,8 @@ struct vessel :poly
 public:
       uint32  imo, accuracy, status, heading, shiptype, top, bottom, left, right, mid;
       mid_types mid_type;
-      double  turn, speed, course, distance;
+      int distance;
+      double  turn, speed, course;
       std::string shipname, callsign;
       poly figure;
       bool size_ok, pos_ok, angle_ok;

@@ -31,3 +31,4 @@ order by
 `vdm_field_list`.`start` asc
 ;
 
+SELECT * FROM mid_codes;
