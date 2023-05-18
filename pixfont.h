@@ -10,80 +10,41 @@ const int VALIGN_CENTER = 0x04;
 const int HALIGN_LEFT = 0x10;
 const int HALIGN_RIGHT = 0x20;
 const int HALIGN_CENTER = 0x40;
-class bitmap_font
+
+
+struct char_info_s
 {
-
-private:
-      int32 count;
-public:
-      puint8 pixdata;
-      std::vector<puint8> start_lut;
-      std::vector<int32>       width_lut;
-      int32 height;
-      int32 get_char(char c)
-      {
-            /*
-now for get symbol data
-code -= 32
-start_lut[code] = pointer to data start
-width_lut[code] = width symbol in pixels
-data len occupied by symbol = width_lut[code]*height
-pix data stored sequentally left to right, from top to bottom
-
-*/
-            c -= 32;
-            if (c >= count)
-                  return -1;
-            return c;
-
-      }
-      bitmap_font() {};
-      bitmap_font(const char * filename);
-      ~bitmap_font() {
-            delete[] pixdata;
-            //delete[] start_lut;            delete[] width_lut;
-      };
+      int32 width_start, width_end, real_width_start, real_width_end;
+      puint32 data;
+      int32 width() {  return width_end - width_start + 1;      }
+      int32 real_width() { return real_width_end - real_width_start + 1; }
+      
 };
-class font
-{
-
+class font {
 private:
-      int32 count;
+      int32 height_start, real_height_start, height_end, real_height_end,interval;
+      puint32 pixdata = nullptr;
+      std::vector <char_info_s> char_info;
 public:
-      puint8 pixdata;
-      std::vector<puint8> start_lut;
-      std::vector<int32>       width_lut;
-      int32 height;
-      int32 get_char(char c)
+      int32 height() { return height_end-height_start; };
+      int32 real_height() { return real_height_end- real_height_start+1; };
+      int32 height_start_delta() { return height_start - real_height_start; }
+      int32 get_interval() { return interval; }
+     // uint32 offset() { return ofs; };
+      char_info_s * get_char_info(char c)
       {
 
             c -= 32;
-            if (c >= count)
-                  return -1;
-            return c;
+            if (c >= char_info.size())
+                  return nullptr;
+            return &char_info[c];
 
       }
-      font(std::string filename)
-      {
-            count = 0;
-            std::ifstream inp{ filename, std::ios_base::binary };
-            if (!inp) {
-                  printf("Can't open font file: %s", filename.c_str());
-                  return;
-            }
-            inp.seekg(0, inp.end);
-            size_t inp_isize = inp.tellg();
-            uint8 * inp_data = new uint8[inp_isize];
-            inp.seekg(0, inp.beg);
-            inp.read((char *)inp_data, inp_isize);
-
-
-      };
-      ~font() {
-            delete[] pixdata;
-            //delete[] start_lut;            delete[] width_lut;
-      };
+      font() {};
+      font(std::string filename);
+      ~font();
 };
+
 
 
 class image {
@@ -96,6 +57,7 @@ public:
       uint32 width() { return w; }
       uint32 height() { return h; }
       puint8 data_ptr() { return data; };
+      image() {}
       image(std::string filename) {
             data_size = h = w = 0;
             loaded = false;

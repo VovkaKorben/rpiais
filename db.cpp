@@ -13,12 +13,15 @@
 std::string read_text(std::string filename)
 {
       std::ifstream f(filename, std::ifstream::binary);
-      if (!f) return "";
+      if (!f) {
+            std::cout << "[db:read_text] File not found: " << filename << std::endl;
+            return "";
+      }
       std::stringstream buffer;
       buffer << f.rdbuf();
       return buffer.str();
 }
-bool mysql_driver::exec_file(std::string filename) {
+int mysql_driver::exec_file(std::string filename) {
 
 
       std::string query = read_text(filename);
@@ -26,7 +29,7 @@ bool mysql_driver::exec_file(std::string filename) {
       return exec(query);
 
 }
-bool mysql_driver::exec(std::string query) {
+int mysql_driver::exec(std::string query) {
       if (!connection) return false;
 
       if (mysql_query(connection, query.c_str()))
@@ -35,10 +38,10 @@ bool mysql_driver::exec(std::string query) {
             fprintf(stderr, " query: %s\n", query.c_str());
             fprintf(stderr, " %s\n", mysql_error(connection));
             last_error_str = mysql_error(connection);
-            return false;
+            return 1;
       }
-      //printf("Query OK: %s\n", query.c_str());
-      return true;
+      //printf("------ Query OK -------------\n%s\n----------------------\n", query.c_str());
+      return 0;
 
 }
 bool  mysql_driver::store()
@@ -46,6 +49,7 @@ bool  mysql_driver::store()
       res = mysql_store_result(connection);
       if (!res)
       {
+            std::cout << mysql_error(connection) << std::endl;
             last_error_str = mysql_error(connection);
             return false;
       }
@@ -64,8 +68,14 @@ bool  mysql_driver::store()
 }
 bool  mysql_driver::has_next() {
       if (!connection) return false;
+
+
       int status = mysql_next_result(connection);
       return status == 0;
+}
+void mysql_driver::magic_close() {
+      for (; mysql_next_result(connection) == 0;)
+            printf("<magic_close>\n");
 }
 bool mysql_driver::fetch() {
       row = mysql_fetch_row(res);
@@ -124,7 +134,8 @@ int mysql_driver::get_myint(const size_t index)
       if (row[index] == nullptr)
             return 0;
       size_t size = strlen(row[index]);
-      char buff[size + 1];
+      //char buff[size + 1];
+      pchar buff = new char[size + 1];
       memcpy(buff, row[index], size);
       buff[size] = '\0';
       return atoi(buff);
@@ -141,7 +152,7 @@ std::string mysql_driver::get_mystr(const size_t index)
 {
 
       size_t size = strlen(row[index]);
-      char buff[size + 1];
+      pchar buff = new char[size + 1];
       memcpy(buff, row[index], size);
       buff[size] = '\0';
       return std::string(buff);
@@ -159,7 +170,7 @@ double mysql_driver::get_myfloat(const size_t index)
       if (row[index] == nullptr)
             return 0;
       size_t size = strlen(row[index]);
-      char buff[size + 1];
+      pchar buff = new char[size + 1];
       memcpy(buff, row[index], size);
       buff[size] = '\0';
       return std::stod(buff);
@@ -176,7 +187,7 @@ double mysql_driver::get_myfloat(const std::string field_name)
 int load_dicts(mysql_driver * driver)
 {
       sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear(); mid_list.clear(); mid_country.clear();
-      driver->exec_file("/home/pi/projects/rpiais/sql/readdicts.sql");
+      driver->exec_file(data_path("/sql/readdicts.sql"));
 
       int dict_index = 0;
       do {
@@ -230,17 +241,17 @@ int load_dicts(mysql_driver * driver)
                         }
                         case 4: { // MID data
 
-                              //std::map<int, mid_struct> mid_list;
+                              //std::map<int, mid_struct_s> mid_list;
                               //std::map<std::string, image> mid_country;
 
 
                               int mid = driver->get_myint("mid");
-                              mid_struct mid_s;
+                              mid_struct_s mid_s;
                               mid_s.code = driver->get_mystr("abbr");
                               mid_s.country = driver->get_mystr("country");
                               mid_list.insert({ mid, mid_s });
-
-                              std::string filename = string_format("/home/pi/projects/rpiais/img/flags/%s.png", mid_s.code.c_str());
+                              //img_minus = new image();
+                              std::string filename = string_format(data_path("/img/flags/%s.png"), mid_s.code.c_str());
                               if (file_exists(filename))
                                     mid_country.insert({ mid_s.code, image(filename) });
                               else
@@ -251,7 +262,6 @@ int load_dicts(mysql_driver * driver)
                         }
 
                   }
-                  putchar('\n');
             }
             driver->free_result();
 
@@ -266,17 +276,17 @@ int load_dicts(mysql_driver * driver)
 }
 int init_db(mysql_driver * driver)
 {
-      driver->exec_file("/home/pi/projects/rpiais/sql/mapread_init.sql");
+      driver->exec_file(data_path("/sql/mapread_init.sql"));
       driver->has_next();
 
-      driver->prepare(PREPARED_NMEA, "/home/pi/projects/rpiais/sql/nmearead.sql");
-      driver->prepare(PREPARED_MAP1, "/home/pi/projects/rpiais/sql/mapread1.sql");
-      driver->prepare(PREPARED_MAP2, "/home/pi/projects/rpiais/sql/mapread2.sql");
+      driver->prepare(PREPARED_NMEA, data_path("/sql/nmearead.sql"));
+      driver->prepare(PREPARED_MAP1, data_path("/sql/mapread1.sql"));
+      driver->prepare(PREPARED_MAP2, data_path("/sql/mapread2.sql"));
 
       //driver->exec_prepared(PREPARED_NMEA, 1234);
 
       // read last gps position
-      driver->exec_file("/home/pi/projects/rpiais/sql/gpsread.sql");
+      if (driver->exec_file(data_path("/sql/gpsread.sql"))) return 1;
       driver->store();
       // driver->exec_file("/home/pi/projects/rpiais/sql/gpsread.sql");
       if (driver->row_count() == 1)

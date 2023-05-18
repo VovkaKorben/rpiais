@@ -1,12 +1,16 @@
 #define map_show 1
 #define vessels_show 1
 
+#ifdef LINUX
+#include <unistd.h>
+#endif 
+
+
+
 #include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <algorithm>
-#include <unistd.h>
-//#include <limits.h>
 #include <cfloat>
 #include "mydefs.h"
 #include "pixfont.h"
@@ -14,7 +18,7 @@
 #include "nmea.h"
 #include "db.h"
 #include "inputs.h"
-
+#include <limits.h>
 #if map_show==1
 const uint64_t SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
 const uint64_t SHAPES_UPDATE_FIRST = 3 * 1000;  // 3 sec for startup updates
@@ -26,13 +30,14 @@ image * img_minus, * img_plus;
 int last_msg_id = 1;// 111203 - 1;
 std::map <int, poly>  shapes;
 
+int show_info_window = 1;
 //using namespace std;
 video_driver * screen;
 mysql_driver * mysql;
 
 
 const int max_zoom_index = 9;
-const int ZOOM_RANGE[max_zoom_index] = { 50, 75,200,300, 1000, 2000, 3000, 5000,10000 };
+const int ZOOM_RANGE[max_zoom_index] = { 50, 120,200,300, 1000, 2000, 3000, 5000,10000 };
 int zoom_index = 2;
 double  zoom;
 int update_nmea(int msg_id) {
@@ -90,15 +95,12 @@ irect rotate_shape_box(poly * shape)
             ipt = transform_point(fpt);
             if (first)
             {
-                  rct.assign_pos(ipt.x, ipt.y);
+                  rct = irect{ ipt.x, ipt.y };
                   first = 0;
             }
             else
             {
-                  rct.x1 = imin(rct.x1, ipt.x);
-                  rct.y1 = imin(rct.y1, ipt.y);
-                  rct.x2 = imax(rct.x2, ipt.x);
-                  rct.y2 = imax(rct.y2, ipt.y);
+                  rct.minmax_expand(ipt);
             }
             corner--;
       }
@@ -116,14 +118,11 @@ irect rotate_shape(poly * shape)
             shape->work[pt_index] = transform_point(shape->origin[pt_index]);
             if (first)
             {
-                  rct.assign_pos(shape->work[pt_index].x, shape->work[pt_index].y);
+                  rct = irect{ shape->work[pt_index].x, shape->work[pt_index].y };
                   first = 0;
             }
             else {
-                  rct.x1 = imin(rct.x1, shape->work[pt_index].x);
-                  rct.y1 = imin(rct.y1, shape->work[pt_index].y);
-                  rct.x2 = imax(rct.x2, shape->work[pt_index].x);
-                  rct.y2 = imax(rct.y2, shape->work[pt_index].y);
+                  rct.minmax_expand(shape->work[pt_index]);
             }
       }
       return rct;
@@ -139,7 +138,7 @@ int load_shapes()
 
 
       //double overlap_coeff = 1.05 * ZOOM_RANGE[max_zoom_index - 1];
-      double overlap_coeff = 3.0;// 0.05 * ZOOM_RANGE[max_zoom_index - 1];
+      double overlap_coeff = 5.0;// 0.05 * ZOOM_RANGE[max_zoom_index - 1];
       int shapes_total = 0, points_total = 0;
 
       // create string with existing id's
@@ -162,11 +161,13 @@ int load_shapes()
       }
       const std::string & tmp = sstr.str();
       const char * cstr = tmp.c_str();
+
+      // irect tmp = VIEWBOX_RECT;
       mysql->exec_prepared(PREPARED_MAP1,
-                           own_vessel.get_meters().x + VIEWBOX_RECT.x1 * overlap_coeff,
-                           own_vessel.get_meters().y + VIEWBOX_RECT.y1 * overlap_coeff,
-                           own_vessel.get_meters().x + VIEWBOX_RECT.x2 * overlap_coeff,
-                           own_vessel.get_meters().y + VIEWBOX_RECT.y2 * overlap_coeff,
+                           own_vessel.get_meters().x + VIEWBOX_RECT.left() * overlap_coeff,
+                           own_vessel.get_meters().y + VIEWBOX_RECT.bottom() * overlap_coeff,
+                           own_vessel.get_meters().x + VIEWBOX_RECT.right() * overlap_coeff,
+                           own_vessel.get_meters().y + VIEWBOX_RECT.top() * overlap_coeff,
                            cstr);
       mysql->free_result();
       while (mysql->has_next());
@@ -270,7 +271,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
       const vessel * v;
       floatpt vessel_center, fp;
       intpt int_center;
-      int circle_size = std::max(int(6 * zoom), 3);
+      int circle_size = imax((int)(6 * zoom), 3);
       for (const auto & vx : vessels)
       {
             //printf("lat lon: %.12f,%.12f\n", v.lat, v.lon);
@@ -314,13 +315,15 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 
 
                               if (p == 0)
-                                    test_box.assign_pos(v->work[p].x, v->work[p].y);
+                                    test_box = irect{ v->work[p].x, v->work[p].y };
                               else
                               {
-                                    test_box.x1 = imin(test_box.x1, v->work[p].x);
+                                    test_box.minmax_expand(v->work[p]);
+                                    /*test_box.x1 = imin(test_box.x1, v->work[p].x);
                                     test_box.y1 = imin(test_box.y1, v->work[p].y);
                                     test_box.x2 = imax(test_box.x2, v->work[p].x);
                                     test_box.y2 = imax(test_box.y2, v->work[p].y);
+                                    */
                               }
 
                         }
@@ -333,7 +336,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
                   }
                   else
                   { //unknown size or angle, just draw small circle with position
-                        screen->draw_circle(int_center.x, int_center.y, circle_size, 0x00000000, 0x0000FF00);
+                        screen->circle(int_center.x, int_center.y, circle_size, 0x00000000, 0x0000FF00);
                   }
 
             }
@@ -353,7 +356,7 @@ void draw_shapes(const ARGB fill_color, const ARGB outline_color)
             //auto const & ent1 : mymap
             //for (poly shape : shapes)
       {
-            if (fill_color != NO_COLOR || outline_color != NO_COLOR) {
+            if (fill_color != clNone || outline_color != clNone) {
                   //calculate new transormed corners
                   new_box = rotate_shape_box(&shape.second);
                   if (new_box.is_intersect(SCREEN_RECT))
@@ -377,15 +380,15 @@ void draw_grid(double angle)
       {
             // axis
             fp.x = -angle;
-            fp.y = min_fit;
+            fp.y = min_fit + 3;
             fp.to_decart();
-            screen->draw_line(CENTER_X, CENTER_Y, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), 0x10000000);
+            screen->draw_line(CENTER_X, CENTER_Y, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), 0xF0000000);
 
             // axis letters
             fp.x = -angle;
             fp.y = min_fit + 9;
             fp.to_decart();
-            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), sides.substr(s, 1), 0x00000000, HALIGN_CENTER | VALIGN_CENTER);
+            screen->draw_text(FONT_OUTLINE, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), sides.substr(s, 1),  HALIGN_CENTER | VALIGN_CENTER, clBlack,clLand );
 
             angle += 90.0;
             if (angle >= 360.0) angle -= 360.0;
@@ -395,7 +398,7 @@ void draw_grid(double angle)
       for (int i = 1; i < 6; i++)
       {
             // distance circle
-            screen->draw_circle(CENTER_X, CENTER_Y, i * circle_radius, 0x10000000, NO_COLOR);
+            screen->circle(CENTER_X, CENTER_Y, i * circle_radius, 0xF0000000, clNone);
 
             // distance marks
             fp.x = -angle;
@@ -406,7 +409,7 @@ void draw_grid(double angle)
                   s = string_format("%d.%d", v / 1000, v % 1000);
             else
                   s = string_format("%d", v);
-            screen->draw_text(SPECCY_FONT, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), s, 0x0000FF, HALIGN_CENTER | VALIGN_CENTER);
+            screen->draw_text(FONT_OUTLINE, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), s,  HALIGN_CENTER | VALIGN_CENTER,clBlack,clLand);
       }
 
 }
@@ -422,36 +425,78 @@ struct less_than_key
 
       }
 };
+void draw_infoline()
+{}
 void draw_vessels_info() {
-      int left = CENTER_X * 2;
+      const int LINE_HEIGHT = 12;
+      //int left = ;
+      //irect info_rect{ CENTER_X * 2 ,0,screen->get_width() -1,screen->get_height() }
+      int headers[4] = { 2, 20, 85, -2 };
       //w = screen->get_width() / 3;
-      screen->draw_fill_rect(left, 0, screen->get_width(), screen->get_height(), 0xA0FFFFFF);
+      screen->fill_rect(INFO_RECT, 0x30FFFFFF);
 
-      // calculate distance + get all MMSI to vector
+      // get all MMSI to vector + alculate distance
       std::vector<int> mmsi;
       for (std::map<int, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {
 
             if (it->second.pos_ok)
                   it->second.distance = it->second.gps.haversine(own_vessel.get_gps());
-
             else
-                  it->second.distance = NAN;
-
+                  it->second.distance = INT_MAX;
             mmsi.push_back(it->first);
       }
 
+      // sort mmsi by distance
       std::sort(mmsi.begin(), mmsi.end(), less_than_key());
-      int lines_count = std::min((int)mmsi.size(), 10);
-      int y_coord;
+
+      // draw header
+      int   y_coord = screen->get_height() - 2;
+      screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[0], y_coord - 1, "CC",  VALIGN_TOP | HALIGN_LEFT,clBlack,clNone);
+      screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[1], y_coord - 1, "MMSI",  VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[2], y_coord - 1, "SHIPNAME",  VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, INFO_RECT.right() + headers[3], y_coord - 1, "DIST",  VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      y_coord -= LINE_HEIGHT;
+
+      // draw ship list
+      int lines_count = imin((int)mmsi.size(), y_coord / LINE_HEIGHT),
+
+            mid;
       for (int i = 0; i < lines_count; i++)
       {
-            y_coord = screen->get_height() - 5 - i * 10;
-            
-            screen->draw_text(SPECCY_FONT, left + 5, y_coord, string_format("%d", mmsi[i]), 0x00000000, VALIGN_TOP | HALIGN_LEFT);
-            screen->draw_text(SPECCY_FONT, screen->get_width()-5, y_coord, string_format("%d", vessels[mmsi[i]].distance), 0x00000000, VALIGN_TOP | HALIGN_RIGHT);
+            mid = vessels[mmsi[i]].mid;
+            if (mid_list.count(mid) != 0)
+            {
+                  std::string ccode = mid_list[mid].code;
+                  if (mid_country.count(ccode) != 0)
+                  {
+                        //image * img = &mid_country[ccode];
+                        screen->draw_image(&mid_country[ccode], INFO_RECT.left() + 2, y_coord, VALIGN_TOP | HALIGN_LEFT);
+                  }
+            }
+            else
+            { // no mid info found, just out mid code
+                  screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[0], y_coord, string_format("%d", mid), VALIGN_TOP | HALIGN_LEFT,clBlack,clNone);
+            }
+            /*
+                      struct mid_struct_s
+                      {
+                            std::string code, country;
+                      };
+
+                      extern std::map<int, mid_struct_s> mid_list;
+                      extern std::map<std::string, image> mid_country;
+                      */
+
+            screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[1], y_coord - 1, string_format("%d", mmsi[i]),  VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[2], y_coord - 1, vessels[mmsi[i]].shipname,  VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, INFO_RECT.right() + headers[3], y_coord - 1, string_format("%d", vessels[mmsi[i]].distance),  VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+            y_coord -= LINE_HEIGHT;
       }
 
-      //for (int y = 5; y < screen->get_height(); y += 10)
+
+      // draw lines
+      // 
+
 
 }
 void draw_frame()
@@ -462,12 +507,12 @@ void draw_frame()
       if (!own_vessel.pos_ok())
       {
             // print `no GPS` and exit
-            screen->draw_bg(0x001111);
-            screen->draw_text(SPECCY_FONT, screen->get_width() / 2, screen->get_height() / 2, "no GPS position", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
+            screen->rectangle(SCREEN_RECT, 0x001111);
+            screen->draw_text(FONT_NORMAL, screen->get_width() / 2, screen->get_height() / 2, "no GPS position",  VALIGN_CENTER | HALIGN_CENTER, 0xFFFF00, clWhite);
             return;
       }
+      screen->fill_rect(SCREEN_RECT, clSea);
 
-      screen->draw_bg(0x0097c2);
       //screen->draw_text(SPECCY_FONT, screen->get_width() / 2, 25, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
       //floatpt mypos = own_vessel.get_pos();
       //mypos.latlon2meter();
@@ -476,46 +521,46 @@ void draw_frame()
 
 #if map_show==1
       next_map_update = update_map_data(next_map_update);
-      draw_shapes(0xb7b074, 0x16150e);
+      draw_shapes(clLand,clBlack );//0x16150e
 #endif
-#if vessels_show==1
-      draw_vessels(0xcd8183, 0x000000);
-#endif
-      //
-            /*
-            uint64_t currentTime = utc_ms();
-            nbFrames++;
-            uint64_t xxx = currentTime - last_time;
-            if (currentTime - last_time >= FPS_INTERVAL) { // If last prinf() was more than 1 sec ago
-                  // printf and reset timer
-                  fps = string_format("Frame: %.3fms", FPS_INTERVAL / double(nbFrames));
-                  nbFrames = 0;
-                  last_time += FPS_INTERVAL;
-            }
-            */
-
 
       draw_grid(own_vessel.get_relative() ? own_vessel.get_heading() : 0.0);
+
+
+#if vessels_show==1
+      draw_vessels(0xcd8183, clBlack);
+#endif
+
+
+
+     
       draw_vessels_info();
 
-      /*
-      draw_text(small_font, 5, VIEW_HEIGHT - 10, string_format("Angle: %.2f", my_angle), 0x000000);
-      draw_text(small_font, 5, VIEW_HEIGHT - 20, string_format("Pos: %.2f x %.2f", mypos.x, mypos.y), 0x000000);
-      draw_text(small_font, 5, VIEW_HEIGHT - 30, string_format("[ZOOM] ind: %d value: %d coeff: %.5f%", zoom_index, ZOOM_RANGE[zoom_index], zoom), 0x000000);
-      draw_text(small_font, 5, VIEW_HEIGHT - 40, string_format("Mouse: %d x %d", mouse_pos.x, mouse_pos.y), 0x000000);
-      draw_text(small_font, 5, VIEW_HEIGHT - 50, fps, 0x000000);
-      */
-      screen->draw_image(img_minus, 0, screen->get_height() - 1, HALIGN_LEFT | VALIGN_TOP);
-      screen->draw_image(img_plus, screen->get_width() / 3 * 2, screen->get_height() - 1, HALIGN_RIGHT | VALIGN_TOP);
-     /* screen->draw_image(img_test,20, screen->get_height() - 10, HALIGN_LEFT | VALIGN_TOP);
-      screen->draw_image(img_test, 100, screen->get_height() - 100, HALIGN_LEFT | VALIGN_TOP,140);
-      screen->draw_image(img_test, 130, screen->get_height() - 30, HALIGN_LEFT | VALIGN_TOP,70);*/
-      
+
+      // plus and minus images
+      screen->draw_image(img_minus, 10, 307, HALIGN_LEFT | VALIGN_TOP, 150);
+      screen->draw_image(img_plus, 272, 316, HALIGN_LEFT | VALIGN_TOP, 150);
+
+
+      if (show_info_window != 0)
+            if (false)
+            {
+                  // draw window
+                  screen->fill_rect(WINDOW_RECT, 0x20000000);
+                  screen->rectangle(WINDOW_RECT, 0x000000);
+            }
+      draw_infoline();
+      screen->upd_pixtoast();
 }
+
 ////////////////////////////////////////////////////////////
 
 void parse_input(void)
 {
+#ifdef LINUX
+
+
+
       //---------------------------------------------
       //----- CHECK FIFO FOR ANY RECEIVED BYTES -----
       //---------------------------------------------
@@ -538,6 +583,7 @@ void parse_input(void)
                    //printf("event: %.08X\n", InputBuffer[i]);
             }
       }
+#endif // LINUX
 }
 inline unsigned long long tm_diff(timespec c, timespec p)
 {
@@ -546,61 +592,78 @@ inline unsigned long long tm_diff(timespec c, timespec p)
 
 }
 void video_loop_start() {
-
+      /*
       const int FPS = 60;
       unsigned long long ns_delay = 1000000000L / FPS, diff, frames_total = 0;
       struct timespec frame_start, frame_end, measure_start;
 
       struct timespec sleep_timer = { 0,0 }, sleep_dummy;
-
+        */
 
 
 
       int frames = 0;
+
       std::string fps_str = "";
 
-      clock_gettime(CLOCK_REALTIME, &measure_start);
+
       while (true)
       {
 
-
-            clock_gettime(CLOCK_REALTIME, &frame_start);
             last_msg_id = update_nmea(last_msg_id);
             draw_frame();
             parse_input();
 
 
-            // df = timediff(pt, ct);
             frames++;
-            clock_gettime(CLOCK_REALTIME, &frame_end);
-            diff = (frame_end.tv_sec - frame_start.tv_sec) * 1000000000L + frame_end.tv_nsec - frame_start.tv_nsec;
-            frames_total += diff;
-
-            if (ns_delay > diff)
-            {
-                  sleep_timer.tv_nsec = ns_delay - diff;
-                  nanosleep(&sleep_timer, &sleep_dummy);
-            }
-
-            //diff = tm_diff(curr, prev);
-            if (frame_end.tv_sec > measure_start.tv_sec)
-            {
-                  diff = (frame_end.tv_sec - measure_start.tv_sec) * 1000000000L + frame_end.tv_nsec - measure_start.tv_nsec;
-
-                  // printf("diff:%-13ld\tframes:%-5d\tframes_total:%-12ld\t%.10f\n", diff, frames, frames_total, frames_total/ (double)frames);
-                 // fps_str = string_format("Frame: %.3f ms", frames_total / 1000000.0 / frames);
-                  fps_str = "none";
-                  frames = 0;
-                  measure_start = frame_end;
-                  frames_total = 0;
-            }
-            //screen->draw_text(SPECCY_FONT, 5, VIEW_HEIGHT - 5, fps_str, 0xFFFF00, VALIGN_TOP | HALIGN_LEFT);
-            screen->draw_text(SPECCY_FONT, 5, 5, fps_str, 0xFFFF00, VALIGN_BOTTOM | HALIGN_LEFT);
-            // switch page
+            //fps_str = "none";            screen->draw_text(FONT_NORMAL, 5, 5, fps_str, 0xFFFF00, VALIGN_BOTTOM | HALIGN_LEFT);
 
             screen->flip();
 
       }
+
+      /*  clock_gettime(CLOCK_REALTIME, &measure_start);
+        while (true)
+        {
+
+
+              clock_gettime(CLOCK_REALTIME, &frame_start);
+              last_msg_id = update_nmea(last_msg_id);
+              draw_frame();
+              parse_input();
+
+
+              // df = timediff(pt, ct);
+              frames++;
+              clock_gettime(CLOCK_REALTIME, &frame_end);
+              diff = (frame_end.tv_sec - frame_start.tv_sec) * 1000000000L + frame_end.tv_nsec - frame_start.tv_nsec;
+              frames_total += diff;
+
+              if (ns_delay > diff)
+              {
+                    sleep_timer.tv_nsec = ns_delay - diff;
+                    nanosleep(&sleep_timer, &sleep_dummy);
+              }
+
+              //diff = tm_diff(curr, prev);
+              if (frame_end.tv_sec > measure_start.tv_sec)
+              {
+                    diff = (frame_end.tv_sec - measure_start.tv_sec) * 1000000000L + frame_end.tv_nsec - measure_start.tv_nsec;
+
+                    // printf("diff:%-13ld\tframes:%-5d\tframes_total:%-12ld\t%.10f\n", diff, frames, frames_total, frames_total/ (double)frames);
+                   // fps_str = string_format("Frame: %.3f ms", frames_total / 1000000.0 / frames);
+                    fps_str = "none";
+                    frames = 0;
+                    measure_start = frame_end;
+                    frames_total = 0;
+              }
+              //screen->draw_text(SPECCY_FONT, 5, VIEW_HEIGHT - 5, fps_str, 0xFFFF00, VALIGN_TOP | HALIGN_LEFT);
+              screen->draw_text(SPECCY_FONT, 5, 5, fps_str, 0xFFFF00, VALIGN_BOTTOM | HALIGN_LEFT);
+              // switch page
+
+              screen->flip();
+
+        }*/
 }
 ////////////////////////////////////////////////////////////
 int main()
@@ -613,6 +676,21 @@ int main()
        */
 
       try {
+            screen = new video_driver(480, 320, 5); // debug purpose = 1 buffer, production value = 5
+            if (screen->get_last_error())
+            {
+                  printf("video_init error.\n");
+                  return 1;
+            }
+            // screen->load_font(FONT_NORMAL, "/home/pi/projects/rpiais/font.bmp");
+             //screen->load_font(SPECCY_FONT, "/home/pi/projects/rpiais/speccy.bmp");
+            screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
+            screen->load_font(FONT_NORMAL, data_path("/img/normal.png"));
+
+            img_minus = new image(data_path("/img/minus.png"));
+            img_plus = new image(data_path("/img/plus.png"));
+            // img_test = new image("/home/pi/projects/rpiais/img/test3.png");
+
             mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
             if (mysql->get_last_error_str()) {
                   printf("mysql init error.\n%s\n", mysql->get_last_error_str());
@@ -622,28 +700,18 @@ int main()
             init_db(mysql);
             //load_dicts(mysql);
 
-            screen = new video_driver(480, 320,5); // debug purpose = 1 buffer, production value = 5
-            if (screen->get_last_error())
-            {
-                  printf("video_init error.\n");
-                  return 1;
-            }
-            screen->load_font(NORMAL_FONT, "/home/pi/projects/rpiais/font.bmp");
-            screen->load_font(SPECCY_FONT, "/home/pi/projects/rpiais/speccy.bmp");
-            img_minus = new image("/home/pi/projects/rpiais/img/minus.png");
-            img_plus = new image("/home/pi/projects/rpiais/img/plus.png");
-           // img_test = new image("/home/pi/projects/rpiais/img/test3.png");
+
 
             min_fit = imin(
                   imin(CENTER_X, screen->get_width() - CENTER_X),
                   imin(CENTER_Y, screen->get_height() - CENTER_Y)
             ) - 20;
             circle_radius = min_fit / 5;
-            if (KeyboardMonitorInitialise())
-            {
-                  //  printf("input init error.\n");
-                   // return 1;
-            }
+            KeyboardMonitorInitialise();
+
+            //  printf("input init error.\n");
+             // return 1;
+
             zoom_changed(zoom_index);
 #if map_show==1
             next_map_update = utc_ms() - 1;

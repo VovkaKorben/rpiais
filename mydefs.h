@@ -1,3 +1,6 @@
+
+
+
 #pragma once
 #ifndef __MYDEFS_H
 #define __MYDEFS_H
@@ -10,10 +13,18 @@
 #include <ostream>
 #include <memory>
 #include <cmath>
+#include  <algorithm>
+
+#ifdef LINUX
 #include <sys/stat.h>
+#endif
+#ifdef WIN
+#include <windows.h>
+//#include <minwindef.h>
+#endif
 //#include <mysql.h>
 
-#define PI 3.1415926535897932384626433832795
+#define PI 3.141592653589793238462643383279
 #define PI180 PI/180.0
 #define RAD 180/PI
 #define EARTH_RADIUS 6371008.8 // used by haversine
@@ -48,14 +59,45 @@ _Pragma("GCC diagnostic ignored \"-Wconversion\"");
 #define WARN_RESTORE _Pragma("GCC diagnostic pop")
 
 #elif _MSC_VER // MSVC
+#define WARN_FLOATCONVERSION_OFF _Pragma("warning(disable : 4244)");
+#define WARN_CONVERSION_OFF _Pragma("warning(disable : 4267)");
+#define WARN_RESTORE _Pragma("warning(default  : 4244)");\
+_Pragma("warning(default  : 4267)");
 #elif __BORLANDC__ //borland 
 #elif __MINGW32__ // mingw 
 #endif
 
 
 
+inline  std::string data_path(std::string rel_path)
+{
+      std::string root;
+#ifdef LINUX
+      root = "/home/pi/data";
+#endif
+#ifdef WIN
+      root = "C:\\ais\\rpiais\\data";
+      const char WINDOWS_FILE_PATH_SEPARATOR = '\\';
+      const char UNIX_FILE_PATH_SEPARATOR = '/';
 
+      std::replace(rel_path.begin(), rel_path.end(), UNIX_FILE_PATH_SEPARATOR, WINDOWS_FILE_PATH_SEPARATOR);
+#endif
+      return root + rel_path;
 
+}
+
+inline uint32 swap32(uint32 v)
+{
+      //  std::cout << std::hex << v << std::endl;
+
+        //v=
+      return     (v >> 24) |
+            ((v >> 8) & 0x0000FF00) |
+            ((v << 8) & 0x00FF0000) |
+            (v << 24);
+      //std::cout << std::hex << v << std::endl;
+      //return v;
+}
 
 //using namespace std;
 inline int imin(int v1, int v2)
@@ -105,17 +147,36 @@ inline std::string dec2bin(uint32 v, int len = 0)
       return r;
 }
 
-#ifdef __GNUC__ //GNU_C_compiler
+
 inline uint64_t utc_ms() {
+
+#ifdef LINUX
       struct timespec t;
       clock_gettime(CLOCK_REALTIME, &t);
+
+#endif
+#ifdef WIN
+      struct timespec { long long tv_sec; long long tv_nsec; }t;    //header part
+      __int64 wintime;
+      GetSystemTimeAsFileTime((FILETIME *)&wintime);
+      wintime -= 116444736000000000i64;  //1jan1601 to 1jan1970
+      t.tv_sec = wintime / 10000000i64;           //seconds
+      t.tv_nsec = wintime % 10000000i64 * 100;      //nano-seconds
+#endif
       return t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
+
+
 inline bool file_exists(const std::string & name) {
+#ifdef LINUX
       struct stat buffer;
       return (stat(name.c_str(), &buffer) == 0);
-}
 #endif
+#ifdef WIN
+      std::ifstream infile(name.c_str());
+      return infile.good();
+#endif
+}
 
 
 struct  intpt
@@ -186,7 +247,7 @@ struct  floatpt
             x -= fp.x;
             y -= fp.y;
       }
-      inline int haversine(floatpt fp)
+      int haversine(floatpt fp)
       {
             double lat_delta = TO_RAD(fp.y - this->y),
                   lon_delta = TO_RAD(fp.x - this->x),
@@ -218,49 +279,75 @@ struct  floatpt
 };
 
 struct irect {
+private:
       int x1, y1, x2, y2;
-      void assign_pos(int _x1, int _y1, int _x2, int _y2)
+public:
+
+      int left() { return x1; }
+      int right() { return x2; }
+      int bottom() { return y1; }
+      int top() { return y2; }
+
+
+      irect() {};
+      irect(int l, int b, int r, int t)
+            //void assign_pos(int _x1, int _y1, int _x2, int _y2)
       {
-            x1 = _x1;
-            y1 = _y1;
-            x2 = _x2;
-            y2 = _y2;
+            x1 = l;
+            y1 = b;
+            x2 = r;
+            y2 = t;
       }
-      void assign_pos(int _x, int _y)
-      {
-            x1 = _x;
-            y1 = _y;
-            x2 = _x;
-            y2 = _y;
+      irect(int lr, int tb) {
+            x1 = x2 = lr;
+            y1 = y2 = tb;
       }
       inline bool is_intersect(irect rct)
       {
             return ((x1 < rct.x2) && (rct.x1 < x2) && (y1 < rct.y2) && (rct.y1 < y2));
       }
-      int width() { return x2 - x1; }
+      int get_width() { return x2 - x1; }
       int hcenter() { return x1 + (x2 - x1) / 2; }
       int vcenter() { return y1 + (y2 - y1) / 2; }
-
+      void minmax_expand(int x, int y)
+      {
+            x1 = imin(x1, x);
+            y1 = imin(y1, y);
+            x2 = imax(x2, x);
+            y2 = imax(y2, y);
+      }
+      void minmax_expand(intpt pt)
+      {
+            minmax_expand(pt.x, pt.y);
+      }
+      void collapse(int w, int h)
+      {
+            x1 += w; x2 -= w;
+            y1 += h; y2 -= h;
+      }
+      /* void offset(int x, int y)
+       {
+       }
+       void offset(intpt pt)
+       {
+             (pt.x, pt.y);
+       }
+       */
 };
 struct frect {
-
-
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wreturn-type"
       double x1, y1, x2, y2;
       floatpt get_corner(int index)
       {
             switch (index) {
-                  case 0:	return floatpt{ x1, y1 };
+
                   case 1:	return floatpt{ x2,y1 };
                   case 2:	return floatpt{ x2,y2 };
                   case 3:	return floatpt{ x1,y2 };
+                  case 0:
+                  default:
+                        return floatpt{ x1, y1 };
             }
       }
-
-#pragma GCC diagnostic pop
-
 };
 
 template<typename ... Args> inline std::string string_format(const std::string & format, Args ... args)

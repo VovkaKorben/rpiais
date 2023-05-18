@@ -1,14 +1,21 @@
-#include <unistd.h>
+
 #include <algorithm>
 #include <fcntl.h>
-#include <linux/fb.h>
-#include <sys/mman.h>
-#include <sys/ioctl.h>
+
+
 #include <stdlib.h>
 #include <malloc.h>
 #include <string.h>
 #include "video.h"
 #include "pixfont.h"
+
+#ifdef LINUX
+#include <unistd.h>
+#include <linux/fb.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#endif
+
 
 #define FB_NO_ERROR 0;
 #define FB_OPEN_FAILED 1;
@@ -18,42 +25,39 @@
 #define FB_PUT_VSCREENINFO_FAILED 5;
 #define FB_PAN_DISPLAY_FAILED 6;
 
+inline uint32 rgb32(uint16 c)
+{
+      return ((c & 0xF800) << 8) |
+            ((c & 0x07E0) << 5) |
+            ((c & 0x001F) << 3);
 
+}
 int CENTER_X, CENTER_Y;
 
-irect VIEWBOX_RECT, SCREEN_RECT;
-
-void _insertionSort(bucketset * b) {
-      double _fx, _s;
-      int j, _y, _ix;
-      for (int i = 1; i < b->cnt; i++)
-      {
-            _y = b->barr[i].y;
-            _fx = b->barr[i].fx;
-            _ix = b->barr[i].ix;
-            _s = b->barr[i].slope;
-            j = i - 1;
-            while ((j >= 0) && (_ix < b->barr[j].ix))
+irect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
+void video_driver::upd_pixtoast()
+{
+#ifdef WIN
+      if (pixtoast->open()) {
+            puint16 ptr = fb_current;
+            for (int i = 0; i < pixel_count; i++)
             {
-                  b->barr[j + 1].y = b->barr[j].y;
-                  b->barr[j + 1].fx = b->barr[j].fx;
-                  b->barr[j + 1].ix = b->barr[j].ix;
-                  b->barr[j + 1].slope = b->barr[j].slope;
-                  j--;
+                  pixels[i].integer = rgb32(*ptr);
+                  ptr++;
             }
-            b->barr[j + 1].y = _y;
-            b->barr[j + 1].fx = _fx;
-            b->barr[j + 1].ix = _ix;
-            b->barr[j + 1].slope = _s;
+            pixtoast->update(pixels);
       }
+#endif
+
 }
 ////////////////////////////////////////////////////////////
 void video_driver::flip()
 {
-
-      vinfo.yoffset = height * current_fb;
+#ifdef LINUX
+      vinfo.yoffset = h * current_fb;
       //vinfo.activate = FB_ACTIVATE_VBL;
       if (ioctl(fbdev, FBIOPAN_DISPLAY, &vinfo)) { last_error = FB_PAN_DISPLAY_FAILED; return; }
+#endif
       current_fb = (current_fb + 1) % buffer_count;
       fb_current = fb_start + pixel_count * current_fb;
       last_error = FB_NO_ERROR;
@@ -61,61 +65,84 @@ void video_driver::flip()
 video_driver::video_driver(int _width, int _height, int _buffer_count) {
 
 
+
+      w = _width, h = _height, buffer_count = _buffer_count;
+#ifdef LINUX
       fb_fix_screeninfo finfo;
-      width = _width, height = _height, buffer_count = _buffer_count;
-
-
       fbdev = open("/dev/fb0", O_RDWR);
       if (!fbdev) { last_error = FB_OPEN_FAILED; return; }
 
       if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) { last_error = FB_GET_VSCREENINFO_FAILED; return; }
+
       // fill new values
-      vinfo.xres = width; // try a smaller resolution
-      vinfo.yres = height;
-      vinfo.xres_virtual = width;
-      vinfo.yres_virtual = height * buffer_count; // double the physical
+      vinfo.xres = w; // try a smaller resolution
+      vinfo.yres = h;
+      vinfo.xres_virtual = w;
+      vinfo.yres_virtual = h * buffer_count; // double the physical
       vinfo.bits_per_pixel = bpp;
       if (ioctl(fbdev, FBIOPUT_VSCREENINFO, &vinfo)) {
             printf("video_driver init: Error setting variable information.\n");
       }
 
       if (ioctl(fbdev, FBIOGET_FSCREENINFO, &finfo)) { last_error = FB_GET_FSCREENINFO_FAILED; return; }
-
-      screen_size = vinfo.xres * vinfo.yres * bytes_per_pix;
+#endif
+      screen_size = w * h * bytes_per_pix;
       fb_size = screen_size * buffer_count;
-      pixel_count = width * height;
+      pixel_count = w * h;
 
+
+#ifdef WIN
+      pixels.reserve(w * h);
+      PixelToaster::TrueColorPixel pix;
+      pix.integer = 0;
+      for (int i = 0; i < pixel_count; i++)
+            pixels.push_back(pix);
+
+      pixtoast = new PixelToaster::Display("AIS pixel toaster window", w, h);
+      fb_start = (puint16)malloc(fb_size);
+#endif
+
+#ifdef LINUX
       fb_start = (PIX_PTR)mmap(NULL, fb_size, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);// map framebuffer to user memory 
       if ((intptr_t)fb_start == -1) { last_error = FB_MMAP_FAILED; return; }
-
+#endif
       // set buffer 0 as first
       current_fb = 0;
       fb_current = fb_start;
 
 
-      CENTER_X = width / 3;
-      CENTER_Y = height / 2;
-      VIEWBOX_RECT.assign_pos(-CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1);
-      SCREEN_RECT.assign_pos(0, 0, width - 1, height - 1);
+      CENTER_X = w / 3;
+      CENTER_Y = h / 2;
+      VIEWBOX_RECT = irect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
+      SCREEN_RECT = irect{ 0, 0, w - 1, h - 1 };
+      INFO_RECT = irect{ CENTER_X * 2, 0, w - 1, h - 1 };
+      WINDOW_RECT = SCREEN_RECT;
+      WINDOW_RECT.collapse(20, 20);
 
-      et = new bucketset[height];
+      et = new bucketset[h];
 
       last_error = FB_NO_ERROR;
 }
 video_driver::~video_driver() {
       delete[]et;
+#ifdef LINUX
       munmap(fb_start, fb_size);
       close(fbdev);
+#endif
+
+#ifdef WIN
+      free(fb_start);
+#endif
 }
 
 ////////////////////////////////////////////////////////////
 inline void video_driver::draw_pix(const int x, const int y, const ARGB color) {
       if (x < 0) return;
       if (y < 0) return;
-      if (x >= width) return;
-      if (y >= height) return;
+      if (x >= w) return;
+      if (y >= h) return;
       //puint8 addr = (puint8)(pix_ptr - y * SCANLINE_LEN + x * BYTES_PER_PIXEL);
-      PIX_PTR addr = fb_current + (height - y - 1) * width + x;
+      PIX_PTR addr = fb_current + (h - y - 1) * w + x;
 
       int alpha = color >> 24;
 
@@ -129,9 +156,9 @@ inline void video_driver::draw_pix(const int x, const int y, const ARGB color) {
                   float a = (float)alpha / 255.0f, ia = 1.0f - a;
                   uint16 c = *((puint16)addr);
 
-                  uint32 r = ((color & 0x00FF0000) >> 8) * a + (c & 0xF800) * ia;
-                  uint32 g = ((color & 0x0000FF00) >> 5) * a + (c & 0x07E0) * ia;
-                  uint32 b = ((color & 0x000000FF) >> 3) * a + (c & 0x001F) * ia;
+                  uint32 r = ((color & 0x00FF0000) >> 8) * ia + (c & 0xF800) * a;
+                  uint32 g = ((color & 0x0000FF00) >> 5) * ia + (c & 0x07E0) * a;
+                  uint32 b = ((color & 0x000000FF) >> 3) * ia + (c & 0x001F) * a;
 
                   *((puint16)addr) = (r & 0xF800) | (g & 0x07E0) | (b & 0x001F);
 
@@ -157,10 +184,26 @@ inline void video_driver::draw_pix(const int x, const int y, const ARGB color) {
 
 
 }
-void video_driver::draw_fill_rect(int x0, int y0, int x1, int y1, const ARGB color) {
-      for (int y = y0; y < y1; y++)
-            for (int x = x0; x < x1; x++)
+void video_driver::rectangle(irect rct, const ARGB color) {
+      int i;
+      for (i = rct.left(); i < rct.right(); i++)
+      {
+            draw_pix(i, rct.bottom(), color);
+            draw_pix(i, rct.top(), color);
+      }
+      for (i = rct.bottom() + 1; i < rct.top() - 1; i++)
+      {
+            draw_pix(rct.left(), i, color);
+            draw_pix(rct.right(), i, color);
+      }
+}
+void video_driver::fill_rect(int x0, int y0, int x1, int y1, const ARGB color) {
+      for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
                   draw_pix(x, y, color);
+}
+void video_driver::fill_rect(irect rct, const ARGB color) {
+      fill_rect(rct.left(), rct.bottom(), rct.right(), rct.top(), color);
 }
 void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
       int w = x1 - x0;
@@ -196,22 +239,18 @@ void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
 void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 { //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
-      if (xe < 0 || xs >= width) return;
+      if (xe < 0 || xs >= w) return;
 
       // clip start & end to window bounds
       if (xs < 0) xs = 0;
-      if (xe >= width) xe = width - 1;
+      if (xe >= w) xe = w - 1;
 
       xe -= xs;
-      PIX_PTR addr = fb_current + (height - y - 1) * width + xs;
+      PIX_PTR addr = fb_current + (h - y - 1) * w + xs;
 #if bpp==16
-
-
-      WARN_CONVERSION_OFF
-            uint16 c = to16(color);
-      WARN_RESTORE
-            while (xe--)
-                  *(addr++) = c;
+      uint16 c = rgb888to565(color);
+      while (xe--)
+            *(addr++) = c;
 #else 
       while (xe--)
             *(addr++) = color;
@@ -262,7 +301,7 @@ void video_driver::draw_image(image * img, int x, int y, int flags, int transpar
             WARN_CONVERSION_OFF
             // transparency = 255- transparency ;
             puint8 src = img->data_ptr();
-      PIX_PTR dst_start = fb_current + (height - y - 1) * width + x,
+      PIX_PTR dst_start = fb_current + (h - y - 1) * w + x,
             dst_current;
       uint8 r, g, b;
       float a, ia;
@@ -282,66 +321,15 @@ void video_driver::draw_image(image * img, int x, int y, int flags, int transpar
                   // combine colors
                   *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); dst_current++;
             }
-            dst_start += width; // proceed to next line
+            dst_start += w; // proceed to next line
       }
       WARN_RESTORE
             WARN_RESTORE
 
 }
-void video_driver::draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags)
+void video_driver::circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill)
 {
-      if (fonts.count(font_index) == 0)
-            return;
-      puint8 data;
-      int32 code, char_width, char_height, ty;
-      // std::transform(s.begin(), s.end(), s.begin(), ::toupper);
-
-       // detect text dimensions
-      int overall_width = 0, overall_count = 0;
-      for (char & c : s) {
-            code = fonts[font_index].get_char(c);
-            if (code == -1)
-                  continue;
-            overall_width += fonts[font_index].width_lut[code];
-            overall_count++;
-      }
-      overall_width += overall_count - 1;
-
-      if ((flags & HALIGN_CENTER) == HALIGN_CENTER)            x -= overall_width / 2;
-      else if ((flags & HALIGN_RIGHT) == HALIGN_RIGHT)            x -= overall_width;
-
-      if ((flags & VALIGN_CENTER) == VALIGN_CENTER)            y += fonts[font_index].height / 2;
-      else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)            y += fonts[font_index].height;
-
-
-      //y += fnt->height;
-      for (char & c : s) {
-            if (x >= width)
-                  break;
-            code = fonts[font_index].get_char(c);
-            if (code == -1)
-                  continue;
-            data = fonts[font_index].start_lut[code];
-            char_width = fonts[font_index].width_lut[code];
-            char_height = fonts[font_index].height;
-            ty = y;
-            while (char_height--)
-            {
-                  for (int tx = 0; tx < char_width; tx++)
-                  {
-                        if (*data)
-                              draw_pix(x + tx, ty, color);
-                        data++;
-                  }
-                  ty--;
-            }
-            x += char_width + 1;
-      }
-
-}
-void video_driver::draw_circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill)
-{
-      if (fill != NO_COLOR) {
+      if (fill != clNone) {
             int f = 1 - radius;
             int ddF_x = 0;
             int ddF_y = -2 * radius;
@@ -375,7 +363,7 @@ void video_driver::draw_circle(const int cx, const int cy, const int radius, con
 
             }
       }
-      if (outline != NO_COLOR) {
+      if (outline != clNone) {
             int f = 1 - radius;
             int ddF_x = 0;
             int ddF_y = -2 * radius;
@@ -413,29 +401,50 @@ void video_driver::draw_circle(const int cx, const int cy, const int radius, con
       }
 
 }
-void video_driver::draw_bg(const ARGB color)
+/*void video_driver::draw_bg(const ARGB color)
 {
       PIX_PTR addr = fb_current; // fb start pointer
 #if bpp==16
-      WARN_CONVERSION_OFF
-            uint16 c = to16(color);
-      WARN_RESTORE
-            for (int pix = 0; pix < pixel_count; pix++)
-                  *(addr++) = c;
-#else 
+      uint16 c = rgb888to565(color);
+      for (int pix = 0; pix < pixel_count; pix++)
+            *(addr++) = c;
+#else
       for (int pix = 0; pix < pixel_count; pix++)
             *(addr++) = color;
 #endif
 
-}
+}*/
 ////////////////////////////////////////////////////////////
+void _insertionSort(bucketset * b) {
+      double _fx, _s;
+      int j, _y, _ix;
+      for (int i = 1; i < b->cnt; i++)
+      {
+            _y = b->barr[i].y;
+            _fx = b->barr[i].fx;
+            _ix = b->barr[i].ix;
+            _s = b->barr[i].slope;
+            j = i - 1;
+            while ((j >= 0) && (_ix < b->barr[j].ix))
+            {
+                  b->barr[j + 1].y = b->barr[j].y;
+                  b->barr[j + 1].fx = b->barr[j].fx;
+                  b->barr[j + 1].ix = b->barr[j].ix;
+                  b->barr[j + 1].slope = b->barr[j].slope;
+                  j--;
+            }
+            b->barr[j + 1].y = _y;
+            b->barr[j + 1].fx = _fx;
+            b->barr[j + 1].ix = _ix;
+            b->barr[j + 1].slope = _s;
+      }
+}
 void video_driver::edge_tables_reset()
 {
       aet.cnt = 0;
-      for (int i = 0; i < height; i++)
+      for (int i = 0; i < h; i++)
             et[i].cnt = 0;
 }
-
 void video_driver::edge_store_tuple_float(bucketset * b, int y_end, double  x_start, double  slope)
 {
       b->barr[b->cnt].y = y_end;
@@ -460,7 +469,7 @@ void video_driver::edge_store_table(intpt pt1, intpt pt2) {
       double dx, dy, slope;
 
       // if both points lies below or above viewable rect - edge skipped
-      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= height and pt2.y >= height))
+      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= h and pt2.y >= h))
             return;
       dy = pt1.y - pt2.y;
 
@@ -570,7 +579,7 @@ void video_driver::draw_fill(const ARGB color)
       }*/
 
 
-      for (int scanline_no = 0; scanline_no < height; scanline_no++)
+      for (int scanline_no = 0; scanline_no < h; scanline_no++)
       {
             /*if (dbg_flag && scanline_no >= 156 && scanline_no <= 158)
             {
@@ -642,21 +651,19 @@ void video_driver::draw_outline(const poly * sh, const ARGB color)
 ////////////////////////////////////////////////////////////
 void video_driver::draw_shape(const poly * sh, const ARGB fill_color, const ARGB outline_color)
 {
-      if (fill_color != NO_COLOR)
+      if (fill_color != clNone)
       {
 
             edge_tables_reset();
             calc_fill(sh);
             draw_fill(fill_color);
       }
-      if (outline_color != NO_COLOR)
+      if (outline_color != clNone)
       {
             draw_outline(sh, outline_color);
       }
 }
-
-
-bool video_driver::load_font(const int index, const char * filename)
+bool video_driver::load_font(const int index, const std::string filename)
 {
       if (fonts.count(index) != 0)
             return false;
@@ -665,4 +672,84 @@ bool video_driver::load_font(const int index, const char * filename)
                     std::forward_as_tuple(filename));
 
       return true;
+}
+void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap)
+//void video_driver::draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags)
+{
+      if (fonts.count(font_index) == 0)
+            return;
+
+      // detect text dimensions
+      int overall_width = 0, overall_count = 0;
+      char_info_s * ch_info;
+      for (char & c : s) {
+            ch_info = fonts[font_index].get_char_info(c);
+            if (ch_info)
+            {
+                  overall_width += ch_info->width();
+                  overall_count++;
+            }
+      }
+      overall_width += (overall_count - 1) * fonts[font_index].get_interval();
+
+      // recalc initial point
+      if ((flags & HALIGN_CENTER) == HALIGN_CENTER) x -= overall_width / 2;
+      else if ((flags & HALIGN_RIGHT) == HALIGN_RIGHT) x -= overall_width;
+
+      if ((flags & VALIGN_CENTER) == VALIGN_CENTER)
+            y += fonts[font_index].height() / 2 + fonts[font_index].height_start_delta();
+      else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)
+            y += fonts[font_index].height() + fonts[font_index].height_start_delta();// +fonts[font_index].offset();
+      /*else   if ((flags & VALIGN_TOP) == VALIGN_TOP)
+            y += fonts[font_index].height_start_delta();// +fonts[font_index].offset();
+      y += fonts[font_index].height_start_delta();
+      */
+
+      int32 scanline_current, y_cnt, x_cnt, x_pos;
+      puint32 data;
+      uint32 pix, clr;
+      //ARGB temp_color, paste_color = color & 0xFFFFFF;
+      for (char & c : s) {
+
+            if (x >= w) return; // go away if next char outside screen
+
+            ch_info = fonts[font_index].get_char_info(c);
+            if (ch_info)
+            {
+                  x -= ch_info->width_start - ch_info->real_width_start;
+
+                  data = ch_info->data;
+                  scanline_current = y;
+                  y_cnt = fonts[font_index].real_height();
+                  while (y_cnt--)
+                  {
+                        x_cnt = ch_info->real_width();
+                        x_pos = x;
+                        while (x_cnt--)
+                        {
+                              // check template color
+                              pix = *data;
+                              clr = pix & 0xFFFFFF;
+
+                              if ((clr == 0x000000) && (black_swap != clNone))
+                              {
+                                    pix = 0xFF0000;
+                              }
+                              else if ((clr == 0xFFFFFF) && (white_swap != clNone))
+                              {
+                                    pix = 0x00FF00;
+                              }
+                              
+
+
+                              draw_pix(x_pos, scanline_current, pix);
+                              data++;
+                              x_pos++;
+                        }
+                        scanline_current--;
+                  }
+                  x += ch_info->width_start - ch_info->real_width_start + ch_info->width() + fonts[font_index].get_interval();
+            }
+      }
+
 }

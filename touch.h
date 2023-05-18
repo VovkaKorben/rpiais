@@ -8,10 +8,11 @@ class touch_manager
 
 
 public:
-      //void add_group(std::string name, int priority);
-      //void add_item(std::string group, intpt[] points);
+      void add_group(std::string name, int priority);
+      void clear_group(std::string name);
+      void add_item(std::string group, intpt intpt);
 
 
-}
+};
 
 #endif

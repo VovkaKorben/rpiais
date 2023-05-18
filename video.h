@@ -4,19 +4,43 @@
 #include "mydefs.h"
 #include "pixfont.h"
 #include "ais_types.h"
-#include <linux/fb.h>
 #include <map>
-#define NORMAL_FONT 0
-#define SPECCY_FONT 1
+
+const ARGB clSea = 0x0097c2;
+const ARGB clLand = 0xb7b074;
+const ARGB clBlack = 0x000000;
+const ARGB clWhite = 0xFFFFFF;
+const ARGB clNone = 0xFFFFFFFF;
+extern irect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
+extern int CENTER_X, CENTER_Y;
+
+
+#ifdef LINUX
+#include <linux/fb.h>
+#endif
+#ifdef WIN
+#include "PixelToaster.h"
+#endif
+
+#define FONT_OUTLINE 0
+#define FONT_NORMAL 1
+
+
 
 #define max_vertices 500
-#define NO_COLOR  0xFFFFFFFF
+
+
+
 #define bpp 16
 #define bytes_per_pix bpp/8
 
-
-
-#define to16(x) ((x >> 8) & 0xF800) | ((x >> 5) & 0x07E0) | ((x >> 3) & 0x001F)
+WARN_CONVERSION_OFF
+inline uint16 rgb888to565(uint32 color)
+{
+      return  ((color >> 8) & 0xF800) | ((color >> 5) & 0x07E0) | ((color >> 3) & 0x001F);
+}
+WARN_RESTORE
+//#define to16(x) ((x >> 8) & 0xF800) | ((x >> 5) & 0x07E0) | ((x >> 3) & 0x001F)
 
 
 
@@ -39,7 +63,11 @@ class video_driver
 {
 private:
 
+#ifdef WIN
+      PixelToaster::Display * pixtoast;
+      std::vector<PixelToaster::TrueColorPixel> pixels;
 
+#endif
 
 
       bucketset aet, * et;
@@ -63,43 +91,48 @@ private:
 
       int last_error,
             fbdev, // fb handle
-            current_fb, buffer_count, width, height,
+            current_fb, buffer_count, w, h,
             pixel_count, // = width * height
             screen_size, // = pixel_count * byte_per_pix, 
             fb_size; // = screen_size * buff_count
 
 
-      std::map <int, bitmap_font> fonts;
+      std::map <int, font> fonts;
+#ifdef LINUX
       fb_var_screeninfo vinfo;
+#endif // LINUX
+
+
       void draw_line_fast(int y, int xs, int xe, const ARGB color);
       void draw_polyline(int x, int y, const ARGB color, int close_polyline = 0);
 public:
-
+      void upd_pixtoast();
 
       void flip();
 
       video_driver(int _width, int _height, int _buffer_count = 1);
       ~video_driver();
       int get_last_error() { return last_error; };
-      int get_width() { return width; };
-      int get_height() { return height; };
+      int get_width() { return w; };
+      int get_height() { return h; };
 
-      bool load_font(const int index, const char * filename);
+      bool load_font(const int index, const std::string filename);
 
 
 
-      void draw_fill_rect(int x0, int y0, int x1, int y1, const ARGB color);
+      void fill_rect(int x0, int y0, int x1, int y1, const ARGB color);
+      void fill_rect(irect rct, const ARGB color);
+      void rectangle(irect rct, const ARGB color);
       void draw_line(int x1, int y1, int x2, int y2, const ARGB color);
       void draw_pix(const int x, const int y, const ARGB color);
       void draw_shape(const poly * sh, const ARGB fill_color, const ARGB outline_color);
-      void draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags = VALIGN_BOTTOM | HALIGN_LEFT);
-      void draw_image(image * img, int x, int y,  int flags , int transparency = 255); // 255 mean full visible, 0 mean none visible
-      void draw_circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill);
-      void draw_bg(const ARGB color);
+      //void draw_text(int font_index, int x, int y, std::string s, int flags);
+      void draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap) ;
+      void draw_image(image * img, int x, int y, int flags, int transparency = 255); // 255 mean full visible, 0 mean none visible
+      void circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill);
+      //void draw_bg(const ARGB color);
 };
 
-extern irect VIEWBOX_RECT, SCREEN_RECT;
-extern int CENTER_X, CENTER_Y;
 
 
 

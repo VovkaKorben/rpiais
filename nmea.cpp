@@ -17,7 +17,7 @@
 std::map<int, std::vector<vdm_field> > vdm_defs;
 std::map<int, int> vdm_length;
 
-std::map<int, mid_struct> mid_list;
+std::map<int, mid_struct_s> mid_list;
 std::map<std::string, image> mid_country;
 
 struct msg_bulk {

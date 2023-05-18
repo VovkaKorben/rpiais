@@ -34,8 +34,8 @@ public:
       double get_myfloat(const size_t index);
       double get_myfloat(const std::string field_name);
 
-      bool exec_file(const std::string filename);
-      bool exec(const std::string query);
+      int exec_file(const std::string filename);
+      int exec(const std::string query);
 
       bool prepare(const int index, std::string filename);
       template<typename ... Args> bool exec_prepared(const int index, Args ... args) {
@@ -49,6 +49,7 @@ public:
       bool  has_next();
       bool fetch();
       void  free_result();
+      void magic_close();
       my_ulonglong row_count();
 
 

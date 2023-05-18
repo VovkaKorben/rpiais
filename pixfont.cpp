@@ -1,133 +1,143 @@
 #include <vector>
 #include "pixfont.h"
 
+enum class searchdir { horizontal, vertical };
 
-#pragma pack(2)
-struct BMPFileHeader {
-      uint16 file_type{ 0x4D42 };          // File type always BM which is 0x4D42
-      uint32 file_size{ 0 };               // Size of the file (in bytes)
-      uint16 reserved1{ 0 };               // Reserved, always 0
-      uint16 reserved2{ 0 };               // Reserved, always 0
-      uint32 offset_data{ 0 };             // Start position of pixel data (bytes from the beginning of the file)
-};
-struct BMPInfoHeader {
-      uint32 size{ 0 };                      // Size of this header (in bytes)
-      int32 width{ 0 };                      // width of bitmap in pixels
-      int32 height{ 0 };                     // width of bitmap in pixels
-      //       (if positive, bottom-up, with origin in lower left corner)
-            //       (if negative, top-down, with origin in upper left corner)
-      uint16 planes{ 1 };                    // No. of planes for the target device, this is always 1
-      uint16 bit_count{ 0 };                 // No. of bits per pixel
-      uint32 compression{ 0 };               // 0 or 3 - uncompressed. THIS PROGRAM CONSIDERS ONLY UNCOMPRESSED BMP images
-      uint32 size_image{ 0 };                // 0 - for uncompressed images
-};
 
-#pragma pack() 
-
-class bmp_image
+class mypng
 {
 private:
-      bool loaded;
-      BMPInfoHeader BMPINFO;
-      BMPFileHeader BMPFILE;
-      uint8 * data;
-      int32 w, h, scanlinelen;
+      const uint8 treshold = 127;
+      bool _loaded;
+      puint32 d;
+      uint32 w, h;
 public:
-      int32 getw() { return BMPINFO.width; };
-      int32 geth() { return BMPINFO.height; };
-      int32 getsl() { return scanlinelen; };
-      bool is_loaded() { return loaded; };
-      uint8 pix(int x, int y)
+      uint32 width() { return w; }
+      uint32 height() { return h; }
+      puint32 data() { return d; }
+
+      bool loaded() { return _loaded; }
+      bool get_marker(int start, int pos, searchdir dir, int32 & s, int32 & e)
       {
-            return data[y * scanlinelen + x];
-      }
-      bmp_image(const char * filename)
-      {
-            loaded = false;
-            std::ifstream inp{ filename, std::ios_base::binary };
-            if (!inp)
-                  return;
-            inp.unsetf(std::ios::skipws);
-            inp.read((char *)&BMPFILE, sizeof(BMPFILE));
-            if (BMPFILE.file_type != 0x4D42) {
-                  throw std::runtime_error("Error! Unrecognized file format.");
-            }
-
-            inp.read((char *)&BMPINFO, sizeof(BMPINFO));
-            if (BMPINFO.bit_count != 8 || BMPINFO.planes != 1)
-                  return;
-
-            scanlinelen = BMPINFO.width;
-            int pad = scanlinelen % 4;
-            if (pad)
-                  scanlinelen += 4 - pad;
-
-
-            //std::cerr << "Error! The file \"" << filename << "\" does not seem to contain bit mask information\n";
-            //throw std::runtime_error("Error! Unrecognized file format.");
-            // Jump to the pixel data location
-            inp.seekg(BMPFILE.offset_data, inp.beg);
-
-            data = new uint8[scanlinelen * BMPINFO.height];
-            inp.read((char *)data, scanlinelen * BMPINFO.height);
-            loaded = true;
-      }
-};
-
-
-
-
-bitmap_font::bitmap_font(const char * filename)
-{
-      //int32 w, h;
-      //uint8 * data;      int32 * start_lut, * width_lut;
-      bmp_image bmp(filename);
-      if (!bmp.is_loaded())
-      {
-            std::cout << "Can't load bitmap font file " << filename << "\n";
-            return;
-      }
-      int32 x = 0;
-      uint8 p, prev = 0;
-      count = 0;
-      std::vector<int32> pix_start;
-      while (x < bmp.getw())
-      {
-            p = bmp.pix(x, bmp.geth() - 1);
-            if (p != prev)// signal changed
+            /* get marker position, checking by transparency > treshold
+            if dir==0, horizontal marker at scanline POS from position START
+            if dir==1, marker should be vertival and POS assume column      */
+            bool start_found = false;
+            //int chk = dir == searchdir::vertical ? pos + start * w : pos * w + start;
+            puint32 td = d + (dir == searchdir::vertical ? pos + start * w : pos * w + start);
+            int end_pos = dir == searchdir::vertical ? h : w;
+            uint8 alpha;
+            for (int search_pos = start; search_pos < end_pos; search_pos++)
             {
-                  if (p) {  //data started
-                        pix_start.push_back(x);
+                  alpha =(uint8)( (*td) >> 24);
+                  if (start_found) {
+                        if (alpha < treshold) {
+                              e = search_pos - 1;
+                              return true;
+                        }
                   }
                   else
-                  {   // data ended
-                        width_lut.push_back(x - pix_start[count]);
-                        count++;
-                  }
+                        if (alpha > treshold)
+                        {
+                              start_found = true;
+                              s = search_pos;
+                        }
+                  td += dir == searchdir::vertical ? w : 1;
             }
-            prev = p;
-            x++;
-      }
-
-      height = bmp.geth() - 2;
-      int total_width = pix_start[count - 1] + width_lut[count - 1];
-      pixdata = new uint8[total_width * height];
-      puint8 pix_ptr = pixdata;
-      start_lut.reserve(count);
-      for (int i = 0; i < count; i++)
+            return false;
+      };
+      mypng(const std::string filename)
       {
-            start_lut.push_back( pix_ptr);
-            for (int y = bmp.geth() - 3; y >= 0; y--)
-                  for (int x = 0; x < width_lut[i]; x++)
-                  {
-                        *pix_ptr = bmp.pix(pix_start[i] + x, y);
+            _loaded = false;
+            // read PNG data
+            std::ifstream inp{ filename, std::ios_base::binary };
+            if (!inp) {
+                  printf("Can't open png file: %s", filename.c_str());
+                  return;
+            }
+            inp.seekg(0, inp.end);
+            size_t inp_isize = inp.tellg();
+            uint32 * inp_data = new uint32[inp_isize];
+            inp.seekg(0, inp.beg);
+            inp.read((pchar)inp_data, inp_isize);
 
-                        pix_ptr++;
-                  }
-            // start_lut[i] = store_pos;
-      }
+            puint8 ttt;
+            unsigned error = lodepng_decode32(&ttt, &w, &h, (puint8)inp_data, inp_isize);
+            d = (puint32)ttt;
 
+            delete[]inp_data;
+            if (error) {
+                  std::cout << "PNG encoding error " << error << ": " << lodepng_error_text(error) << std::endl;
+                  return;
+            }
+
+            _loaded = true;
+      };
 
 };
+font::font(std::string filename)
+
+{
+      int32  count = 0;
+      interval = 1;
+      mypng png_file(filename);
+      if (!png_file.loaded())                  return;
+
+      // get vertical dimensions
+      if (!png_file.get_marker(0, 0, searchdir::vertical, height_start, height_end)) { std::cout << "Load font failed. Can't find height marker #1" << std::endl;  return; }
+      if (!png_file.get_marker(0, 1, searchdir::vertical, real_height_start, real_height_end)) { std::cout << "Load font failed. Can't find height marker #2" << std::endl;  return; }
 
 
+      // calculate horizontal markers
+      int search_start = 0, total_width = 0;
+      {
+            int32 cs, ce;
+            //        std::vector<char_info_t> tmp_info;
+            while (png_file.get_marker(search_start, 1, searchdir::horizontal, cs, ce)) {
+                  search_start = ce + 1;
+                  count++;
+                  total_width += ce - cs + 1;
+            }
+      }
+
+
+      pixdata = new uint32[total_width * real_height()];
+      search_start = 0;
+
+      // copy pixel data to work array
+      int32 c,  x, y;
+      puint32 src_ptr_init, src_ptr, dest_ptr = pixdata;
+      char_info_s ch_info;
+
+      for (c = 0; c < count; c++)
+      {
+            // get char horizontal bounds
+            png_file.get_marker(search_start, 0, searchdir::horizontal, ch_info.width_start, ch_info.width_end);
+            png_file.get_marker(search_start, 1, searchdir::horizontal, ch_info.real_width_start, ch_info.real_width_end);
+            ch_info.data = dest_ptr;
+            char_info.push_back(ch_info);
+
+            src_ptr_init = png_file.data() + real_height_start * png_file.width() + ch_info.real_width_start;
+            for (y = 0; y < real_height(); y++)
+            {
+                  src_ptr = src_ptr_init;
+                  for (x = 0; x < ch_info.real_width(); x++)
+                  {
+                        // convert ABGR -> ARGB & inverse Alpha
+                        *dest_ptr =
+                              ((*src_ptr & 0xFF00FF00) ^ 0xFF000000) | // preserve Alpha and Green
+                              ((*src_ptr & 0xFF) << 16) | // move Red 
+                              ((*src_ptr & 0xFF0000) >> 16); // move Blue
+
+                        src_ptr++;
+                        dest_ptr++;
+                  }
+                  src_ptr_init += png_file.width();
+            }
+            search_start =  ch_info.real_width_end+1;
+      }
+};
+font::~font() {
+      if (pixdata)
+            delete[] pixdata;
+};

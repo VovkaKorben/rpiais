@@ -1,0 +1,2 @@
+- take a look for long ship names in info_box
+- optimize drawmap->drawpoly->draw_outline, to not draw hidden ribs

@@ -1,14 +1,21 @@
 
-#include <linux/input.h>
+
 #include <iostream>
 #include <stdio.h>
 #include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+
 #include <sstream>
-#include <unistd.h>
+
 #include <cstring>
 #include "inputs.h"
+
+#ifdef LINUX
+#include <linux/input.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif
+
 
 #define BITS_PER_LONG (sizeof(long) * 8)
 #define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
@@ -20,8 +27,12 @@
 #define EV_KEY_REPEAT 0x00020000
 int our_input_fifo_filestream = -1;
 
-int KeyboardMonitorInitialise(void)
+void KeyboardMonitorInitialise(void)
 {
+#ifdef LINUX
+
+
+
       //--------------------------------------
       //----- CREATE A FIFO / NAMED PIPE -----
       //--------------------------------------
@@ -55,7 +66,7 @@ int KeyboardMonitorInitialise(void)
       //-------------------------------------------------------
       int pid2 = fork();
       if (pid2 != 0)
-            return pid2;
+            return;
       //----- THIS IS THE CHILD THREAD -----
       std::cout << "KeyboardMonitor child thread started" << std::endl;
 
@@ -162,7 +173,7 @@ int KeyboardMonitorInitialise(void)
       close(FileDevice);
       std::cout << "KeyboardMonitor child thread ending!" << std::endl;
       _exit(0);		//Don't forget to exit!
-
+#endif // LINUX
 }
 /*
 void KeyboardMonitorProcess(void)

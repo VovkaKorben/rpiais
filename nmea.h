@@ -39,12 +39,12 @@ extern std::map<int, std::vector<vdm_field> > vdm_defs;
 extern std::map<int, int> vdm_length;
 extern std::map<std::string, FnPtr> lut;
 
-struct mid_struct
+struct mid_struct_s
 {
       std::string code, country;
 };
 
-extern std::map<int, mid_struct> mid_list;
+extern std::map<int, mid_struct_s> mid_list;
 extern std::map<std::string, image> mid_country;
 
 #define NMEA_GOOD 0x0000

@@ -3,6 +3,6 @@
 #define __INPUTS_H
 
 extern int our_input_fifo_filestream;
-int KeyboardMonitorInitialise(void);
+void KeyboardMonitorInitialise(void);
 
 #endif
