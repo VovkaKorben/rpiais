@@ -15,6 +15,7 @@ extern irect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
 extern int CENTER_X, CENTER_Y;
 
 
+
 #ifdef LINUX
 #include <linux/fb.h>
 #endif
@@ -24,32 +25,34 @@ extern int CENTER_X, CENTER_Y;
 
 #define FONT_OUTLINE 0
 #define FONT_NORMAL 1
-
-
-
 #define max_vertices 500
 
 
 
-#define bpp 16
-#define bytes_per_pix bpp/8
+//#define bpp 16#define bytes_per_pix bpp/8
 
-WARN_CONVERSION_OFF
+//WARN_CONVERSION_OFF
 inline uint16 rgb888to565(uint32 color)
 {
-      return  ((color >> 8) & 0xF800) | ((color >> 5) & 0x07E0) | ((color >> 3) & 0x001F);
+      return  ((uint16)(color >> 8) & 0xF800) |
+            ((uint16)(color >> 5) & 0x07E0) |
+            ((uint16)(color >> 3) & 0x001F);
 }
-WARN_RESTORE
+inline uint32 rgb565to888(uint16 c)
+{
+      return ((c & 0xF800) << 8) |
+            ((c & 0x07E0) << 5) |
+            ((c & 0x001F) << 3);
+
+}
+//WARN_RESTORE
 //#define to16(x) ((x >> 8) & 0xF800) | ((x >> 5) & 0x07E0) | ((x >> 3) & 0x001F)
 
 
 
 
-#if bpp==16
+
 #define PIX_PTR puint16
-#else
-#define PIX_PTR puint32
-#endif
 
 struct bucket {
       int y, ix;
@@ -59,6 +62,8 @@ struct bucketset {
       int cnt;
       bucket barr[max_vertices];
 };
+
+
 class video_driver
 {
 private:
@@ -69,7 +74,7 @@ private:
 
 #endif
 
-
+      PIX_PTR pix_buf, fb_start;
       bucketset aet, * et;
 
       void edge_tables_reset();
@@ -86,15 +91,13 @@ private:
 
 
 
-      PIX_PTR fb_start, // fb start pointer
-            fb_current; // fb active page pointer
 
       int last_error,
             fbdev, // fb handle
-            current_fb, buffer_count, w, h,
+            current_fb, buffer_count,
             pixel_count, // = width * height
-            screen_size, // = pixel_count * byte_per_pix, 
-            fb_size; // = screen_size * buff_count
+            screen_size; // = pixel_count * byte_per_pix, 
+
 
 
       std::map <int, font> fonts;
@@ -110,11 +113,11 @@ public:
 
       void flip();
 
-      video_driver(int _width, int _height, int _buffer_count = 1);
+      video_driver(int _buffer_count = 1);
       ~video_driver();
       int get_last_error() { return last_error; };
-      int get_width() { return w; };
-      int get_height() { return h; };
+      int get_width() { return vinfo.xres; };
+      int get_height() { return vinfo.yres; };
 
       bool load_font(const int index, const std::string filename);
 
@@ -127,7 +130,7 @@ public:
       void draw_pix(const int x, const int y, const ARGB color);
       void draw_shape(const poly * sh, const ARGB fill_color, const ARGB outline_color);
       //void draw_text(int font_index, int x, int y, std::string s, int flags);
-      void draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap) ;
+      void draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap, bool dbg = false);
       void draw_image(image * img, int x, int y, int flags, int transparency = 255); // 255 mean full visible, 0 mean none visible
       void circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill);
       //void draw_bg(const ARGB color);

@@ -52,7 +52,7 @@ public:
             // read PNG data
             std::ifstream inp{ filename, std::ios_base::binary };
             if (!inp) {
-                  printf("Can't open png file: %s", filename.c_str());
+                  printf("Can't open png file: %s\n", filename.c_str());
                   return;
             }
             inp.seekg(0, inp.end);
@@ -81,7 +81,11 @@ font::font(std::string filename)
       int32  count = 0;
       interval = 1;
       mypng png_file(filename);
-      if (!png_file.loaded())                  return;
+      if (!png_file.loaded())   
+            {
+                  printf("font load error, no file: %s\n", filename.c_str());
+                  return;
+            };
 
       // get vertical dimensions
       if (!png_file.get_marker(0, 0, searchdir::vertical, height_start, height_end)) { std::cout << "Load font failed. Can't find height marker #1" << std::endl;  return; }

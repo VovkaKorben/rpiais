@@ -14,6 +14,8 @@
 #include <linux/fb.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#include  <linux/kd.h>
+
 #endif
 
 
@@ -24,133 +26,124 @@
 #define FB_MMAP_FAILED 4;
 #define FB_PUT_VSCREENINFO_FAILED 5;
 #define FB_PAN_DISPLAY_FAILED 6;
+#define FB_INVALID_BUFFER_ADDRESS 7;
+#define FB_BUFFER_COUNT_ERROR 8;
 
-inline uint32 rgb32(uint16 c)
-{
-      return ((c & 0xF800) << 8) |
-            ((c & 0x07E0) << 5) |
-            ((c & 0x001F) << 3);
 
-}
 int CENTER_X, CENTER_Y;
 
 irect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
-void video_driver::upd_pixtoast()
-{
-#ifdef WIN
-      if (pixtoast->open()) {
-            puint16 ptr = fb_current;
-            for (int i = 0; i < pixel_count; i++)
-            {
-                  pixels[i].integer = rgb32(*ptr);
-                  ptr++;
-            }
-            pixtoast->update(pixels);
-      }
-#endif
 
-}
 ////////////////////////////////////////////////////////////
 void video_driver::flip()
 {
-#ifdef LINUX
-      vinfo.yoffset = h * current_fb;
-      //vinfo.activate = FB_ACTIVATE_VBL;
-      if (ioctl(fbdev, FBIOPAN_DISPLAY, &vinfo)) { last_error = FB_PAN_DISPLAY_FAILED; return; }
-#endif
-      current_fb = (current_fb + 1) % buffer_count;
-      fb_current = fb_start + pixel_count * current_fb;
+
+      if (buffer_count)
+      {
+            vinfo.yoffset = vinfo.yres * current_fb;
+            if (ioctl(fbdev, FBIOPAN_DISPLAY, &vinfo)) { last_error = FB_PAN_DISPLAY_FAILED; return; }
+            current_fb = (current_fb + 1) % buffer_count;
+            pix_buf = fb_start + pixel_count * current_fb;
+      }
+      else
+      {
+            memcpy(fb_start, pix_buf, screen_size);
+      }
       last_error = FB_NO_ERROR;
 }
-video_driver::video_driver(int _width, int _height, int _buffer_count) {
-
-
-
-      w = _width, h = _height, buffer_count = _buffer_count;
-#ifdef LINUX
+video_driver::video_driver(int _buffer_count)
+{
+      // open device
       fb_fix_screeninfo finfo;
-      fbdev = open("/dev/fb0", O_RDWR);
+      fbdev = open("/dev/fb1", O_RDWR);
       if (!fbdev) { last_error = FB_OPEN_FAILED; return; }
 
+      // get VINFO/FINFO and set buffer count
       if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) { last_error = FB_GET_VSCREENINFO_FAILED; return; }
+      // setup screen numbers
+      pixel_count = vinfo.xres * vinfo.yres;
+      screen_size = pixel_count * vinfo.bits_per_pixel / 8;
 
-      // fill new values
-      vinfo.xres = w; // try a smaller resolution
-      vinfo.yres = h;
-      vinfo.xres_virtual = w;
-      vinfo.yres_virtual = h * buffer_count; // double the physical
-      vinfo.bits_per_pixel = bpp;
-      if (ioctl(fbdev, FBIOPUT_VSCREENINFO, &vinfo)) {
-            printf("video_driver init: Error setting variable information.\n");
+      if (_buffer_count > 0)
+      {
+            vinfo.yres_virtual = vinfo.yres * _buffer_count;
+            if (ioctl(fbdev, FBIOPUT_VSCREENINFO, &vinfo)) {
+                  printf("video_driver init: Error setting variable information.\n");
+            }
+            if (vinfo.yres != vinfo.yres_virtual)
+                  _buffer_count = 1;
+            buffer_count = _buffer_count;
+      }
+      else {
+            _buffer_count = 1;
+            buffer_count = 0;
       }
 
+
+      // check FINFO is ok
       if (ioctl(fbdev, FBIOGET_FSCREENINFO, &finfo)) { last_error = FB_GET_FSCREENINFO_FAILED; return; }
-#endif
-      screen_size = w * h * bytes_per_pix;
-      fb_size = screen_size * buffer_count;
-      pixel_count = w * h;
+      if ((intptr_t)finfo.smem_start == 0)
+      {
+            printf("FBIOGET_FSCREENINFO returns invalid buffer address.\n");
+            last_error = FB_INVALID_BUFFER_ADDRESS;
+      }
 
 
-#ifdef WIN
-      pixels.reserve(w * h);
-      PixelToaster::TrueColorPixel pix;
-      pix.integer = 0;
-      for (int i = 0; i < pixel_count; i++)
-            pixels.push_back(pix);
-
-      pixtoast = new PixelToaster::Display("AIS pixel toaster window", w, h);
-      fb_start = (puint16)malloc(fb_size);
-#endif
-
-#ifdef LINUX
-      fb_start = (PIX_PTR)mmap(NULL, fb_size, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);// map framebuffer to user memory 
+      // map fb memory
+      fb_start = (PIX_PTR)mmap(NULL, screen_size * _buffer_count, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);// map framebuffer to user memory 
       if ((intptr_t)fb_start == -1) { last_error = FB_MMAP_FAILED; return; }
-#endif
-      // set buffer 0 as first
-      current_fb = 0;
-      fb_current = fb_start;
+
+      if (buffer_count)
+      {
+            pix_buf = fb_start;
+            current_fb = 0;
+      }
+      else
+      {
+            pix_buf = (PIX_PTR)malloc(screen_size);
+      }
 
 
-      CENTER_X = w / 3;
-      CENTER_Y = h / 2;
+
+      // creating rects
+      CENTER_X = vinfo.xres / 3;
+      CENTER_Y = vinfo.yres / 2;
       VIEWBOX_RECT = irect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
-      SCREEN_RECT = irect{ 0, 0, w - 1, h - 1 };
-      INFO_RECT = irect{ CENTER_X * 2, 0, w - 1, h - 1 };
+      SCREEN_RECT = irect{ 0, 0, vinfo.xres - 1, vinfo.yres - 1 };
+      INFO_RECT = irect{ CENTER_X * 2, 0, vinfo.xres - 1, vinfo.yres - 1 };
       WINDOW_RECT = SCREEN_RECT;
       WINDOW_RECT.collapse(20, 20);
 
-      et = new bucketset[h];
+      // init fill 
+      et = new bucketset[vinfo.yres];
 
       last_error = FB_NO_ERROR;
 }
 video_driver::~video_driver() {
       delete[]et;
-#ifdef LINUX
-      munmap(fb_start, fb_size);
+      if (!buffer_count)
+            free(pix_buf);
+      munmap(fb_start, screen_size * buffer_count);
       close(fbdev);
-#endif
 
-#ifdef WIN
-      free(fb_start);
-#endif
 }
 
 ////////////////////////////////////////////////////////////
 inline void video_driver::draw_pix(const int x, const int y, const ARGB color) {
       if (x < 0) return;
       if (y < 0) return;
-      if (x >= w) return;
-      if (y >= h) return;
+      if (x >= vinfo.xres) return;
+      if (y >= vinfo.yres) return;
       //puint8 addr = (puint8)(pix_ptr - y * SCANLINE_LEN + x * BYTES_PER_PIXEL);
-      PIX_PTR addr = fb_current + (h - y - 1) * w + x;
+      PIX_PTR addr = pix_buf + (vinfo.yres - y - 1) * vinfo.xres + x;
 
       int alpha = color >> 24;
 
-#if bpp==16
-      WARN_FLOATCONVERSION_OFF
-            WARN_CONVERSION_OFF
+      if (vinfo.bits_per_pixel == 16) {
+            //WARN_FLOATCONVERSION_OFF
+              //    WARN_CONVERSION_OFF
             if (alpha == 0) // no transparency at all
-                  *((puint16)addr) = ((color >> 8) & 0xF800) | ((color >> 5) & 0x07E0) | ((color >> 3) & 0x001F);
+                  *((puint16)addr) = rgb888to565(color);
             else if (alpha != 255) // has semi-transparency
             {
                   float a = (float)alpha / 255.0f, ia = 1.0f - a;
@@ -163,24 +156,24 @@ inline void video_driver::draw_pix(const int x, const int y, const ARGB color) {
                   *((puint16)addr) = (r & 0xF800) | (g & 0x07E0) | (b & 0x001F);
 
             }
-      WARN_RESTORE
-            WARN_RESTORE
-#else
-      if (alpha == 0) // no transparency, simple put color
-            *((puint32)addr) = color;
-      else if (alpha != 255) {
-            float a = (float)alpha / 255.0f, ia = 1.0f - a;
-            *addr = ((color >> 24) & 0xFF) * a + *addr * ia;
-            addr++;
-            *addr = ((color >> 16) & 0xFF) * a + *addr * ia;
-            addr++;
-            *addr = ((color >> 8) & 0xFF) * a + *addr * ia;
-            addr++;
-            *addr = 0;
+            //WARN_RESTORE                  WARN_RESTORE
       }
-      *((puint32)addr) = color;
+      else {
+            if (alpha == 0) // no transparency, simple put color
+                  *((puint32)addr) = color;
+            else if (alpha != 255) {
+                  float a = (float)alpha / 255.0f, ia = 1.0f - a;
+                  *addr = ((color >> 24) & 0xFF) * a + *addr * ia;
+                  addr++;
+                  *addr = ((color >> 16) & 0xFF) * a + *addr * ia;
+                  addr++;
+                  *addr = ((color >> 8) & 0xFF) * a + *addr * ia;
+                  addr++;
+                  *addr = 0;
+            }
+            *((puint32)addr) = color;
 
-#endif
+      }
 
 
 }
@@ -239,22 +232,18 @@ void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
 void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 { //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
-      if (xe < 0 || xs >= w) return;
+      if (xe < 0 || xs >= vinfo.xres) return;
 
       // clip start & end to window bounds
       if (xs < 0) xs = 0;
-      if (xe >= w) xe = w - 1;
+      if (xe >= vinfo.xres) xe = vinfo.xres - 1;
 
       xe -= xs;
-      PIX_PTR addr = fb_current + (h - y - 1) * w + xs;
-#if bpp==16
+      PIX_PTR addr = pix_buf + (vinfo.yres - y - 1) * vinfo.xres + xs;
       uint16 c = rgb888to565(color);
       while (xe--)
             *(addr++) = c;
-#else 
-      while (xe--)
-            *(addr++) = color;
-#endif
+
 
 }
 void video_driver::draw_polyline(int x, int y, const ARGB color, int close_polyline)
@@ -297,11 +286,11 @@ void video_driver::draw_image(image * img, int x, int y, int flags, int transpar
 
       if ((flags & VALIGN_CENTER) == VALIGN_CENTER)            y += img->height() / 2;
       else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)            y += img->height();
-      WARN_FLOATCONVERSION_OFF
-            WARN_CONVERSION_OFF
+//      WARN_FLOATCONVERSION_OFF
+            //WARN_CONVERSION_OFF
             // transparency = 255- transparency ;
             puint8 src = img->data_ptr();
-      PIX_PTR dst_start = fb_current + (h - y - 1) * w + x,
+      PIX_PTR dst_start = pix_buf + (vinfo.yres - y - 1) * vinfo.xres + x,
             dst_current;
       uint8 r, g, b;
       float a, ia;
@@ -321,10 +310,9 @@ void video_driver::draw_image(image * img, int x, int y, int flags, int transpar
                   // combine colors
                   *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); dst_current++;
             }
-            dst_start += w; // proceed to next line
+            dst_start += vinfo.xres; // proceed to next line
       }
-      WARN_RESTORE
-            WARN_RESTORE
+   //   WARN_RESTORE            WARN_RESTORE
 
 }
 void video_driver::circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill)
@@ -401,19 +389,7 @@ void video_driver::circle(const int cx, const int cy, const int radius, const AR
       }
 
 }
-/*void video_driver::draw_bg(const ARGB color)
-{
-      PIX_PTR addr = fb_current; // fb start pointer
-#if bpp==16
-      uint16 c = rgb888to565(color);
-      for (int pix = 0; pix < pixel_count; pix++)
-            *(addr++) = c;
-#else
-      for (int pix = 0; pix < pixel_count; pix++)
-            *(addr++) = color;
-#endif
 
-}*/
 ////////////////////////////////////////////////////////////
 void _insertionSort(bucketset * b) {
       double _fx, _s;
@@ -442,7 +418,7 @@ void _insertionSort(bucketset * b) {
 void video_driver::edge_tables_reset()
 {
       aet.cnt = 0;
-      for (int i = 0; i < h; i++)
+      for (int i = 0; i < vinfo.yres; i++)
             et[i].cnt = 0;
 }
 void video_driver::edge_store_tuple_float(bucketset * b, int y_end, double  x_start, double  slope)
@@ -469,7 +445,7 @@ void video_driver::edge_store_table(intpt pt1, intpt pt2) {
       double dx, dy, slope;
 
       // if both points lies below or above viewable rect - edge skipped
-      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= h and pt2.y >= h))
+      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= vinfo.yres and pt2.y >= vinfo.yres))
             return;
       dy = pt1.y - pt2.y;
 
@@ -579,17 +555,8 @@ void video_driver::draw_fill(const ARGB color)
       }*/
 
 
-      for (int scanline_no = 0; scanline_no < h; scanline_no++)
+      for (int scanline_no = 0; scanline_no < vinfo.yres; scanline_no++)
       {
-            /*if (dbg_flag && scanline_no >= 156 && scanline_no <= 158)
-            {
-                  cout << "------------------------------" << endl;
-                  cout << "Scanline before: " << scanline_no << endl;
-                  printTuple(&aet);
-                  cout << "-  -  -  -  -  -  -  -  -  -  -  -\n\n" << endl;
-            }*/
-
-
             for (int b = 0; b < et[scanline_no].cnt; b++)
             {
                   edge_store_tuple_int(
@@ -673,7 +640,7 @@ bool video_driver::load_font(const int index, const std::string filename)
 
       return true;
 }
-void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap)
+void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap, bool dbg)
 //void video_driver::draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags)
 {
       if (fonts.count(font_index) == 0)
@@ -705,13 +672,15 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
       y += fonts[font_index].height_start_delta();
       */
 
+
+
       int32 scanline_current, y_cnt, x_cnt, x_pos;
       puint32 data;
-      uint32 pix, clr;
+      uint32 font_pix, clr, a;
       //ARGB temp_color, paste_color = color & 0xFFFFFF;
       for (char & c : s) {
 
-            if (x >= w) return; // go away if next char outside screen
+            if (x >= vinfo.xres) return; // go away if next char outside screen
 
             ch_info = fonts[font_index].get_char_info(c);
             if (ch_info)
@@ -728,21 +697,36 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
                         while (x_cnt--)
                         {
                               // check template color
-                              pix = *data;
-                              clr = pix & 0xFFFFFF;
+                              font_pix = *data;
+                              clr = font_pix & 0xFFFFFF;
 
                               if ((clr == 0x000000) && (black_swap != clNone))
                               {
-                                    pix = 0xFF0000;
+                                    font_pix = 0x000000;
                               }
                               else if ((clr == 0xFFFFFF) && (white_swap != clNone))
                               {
-                                    pix = 0x00FF00;
+
+                                    float aswap = ((white_swap >> 24) ^ 0xFF) / 255.0;
+                                    float afont = (*data >> 24) / 255.0;
+                                    float aresult = aswap * afont;
+                                    uint32 ares = aresult * 255;
+                                    //ares = ares ^ 0xFF;
+                                    ares = ares << 24;
+                                    //uint32 ares = ((uint8)(aresult * 255)) ^ 0xFF;
+                                    font_pix = ares | (white_swap & 0xFFFFFF);
+                                    /*uint32 font_alpha = (font_pix >> 24) ^ 255;
+                                    uint32 malpha = replace_alpha * font_alpha;
+                                    malpha = malpha >> 8;
+                                    malpha = malpha ^ 255;
+                                    a = (((white_swap >> 24) * (font_pix >> 24)) & 0x0000FF00) << 16;
+                                    */
+                                    //font_pix = a | (white_swap & 0xFFFFFF);
                               }
-                              
 
 
-                              draw_pix(x_pos, scanline_current, pix);
+
+                              draw_pix(x_pos, scanline_current, font_pix);
                               data++;
                               x_pos++;
                         }

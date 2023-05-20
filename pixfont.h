@@ -49,7 +49,7 @@ public:
 
 class image {
 private:
-      uint32 data_size, w, h;
+      uint32 data_size,w,h;
       puint8 data;
       bool loaded;
 public:
