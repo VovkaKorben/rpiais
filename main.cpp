@@ -19,6 +19,7 @@
 #include "db.h"
 #include <limits.h>
 #include <chrono>
+#include "touch.h"
 
 
 #if map_show==1
@@ -36,7 +37,7 @@ int show_info_window = 1;
 //using namespace std;
 video_driver * screen;
 mysql_driver * mysql;
-
+touch_manager * touch;
 
 const int max_zoom_index = 9;
 const int ZOOM_RANGE[max_zoom_index] = { 50, 120,200,300, 1000, 2000, 3000, 5000,10000 };
@@ -71,7 +72,7 @@ void zoom_changed(int new_zoom_index)
       zoom = (double)min_fit / ZOOM_RANGE[zoom_index] / 2;
 }
 ////////////////////////////////////////////////////////////
-intpt transform_point(floatpt pt)
+IntPoint transform_point(FloatPoint pt)
 {
       pt.offset_remove(own_vessel.get_meters());
 
@@ -83,13 +84,13 @@ intpt transform_point(floatpt pt)
       int x = int(round(pt.x)) + CENTER_X,
             y = int(round(pt.y)) + CENTER_Y;
       //y = invertYaxis ? CENTER_Y - y - 1 : y + CENTER_Y;
-      return intpt{ x,y };
+      return IntPoint{ x,y };
 }
-irect rotate_shape_box(poly * shape)
+IntRect rotate_shape_box(poly * shape)
 {
-      irect rct;
-      floatpt fpt;
-      intpt ipt;
+      IntRect rct;
+      FloatPoint fpt;
+      IntPoint ipt;
       int corner = 3, first = 1;
       while (corner >= 0)
       {
@@ -97,7 +98,7 @@ irect rotate_shape_box(poly * shape)
             ipt = transform_point(fpt);
             if (first)
             {
-                  rct = irect{ ipt.x, ipt.y };
+                  rct = IntRect{ ipt.x, ipt.y };
                   first = 0;
             }
             else
@@ -109,9 +110,9 @@ irect rotate_shape_box(poly * shape)
 
       return rct;
 }
-irect rotate_shape(poly * shape)
+IntRect rotate_shape(poly * shape)
 {
-      irect rct;
+      IntRect rct;
       int first = 1;
       //rct.assign_pos(0.0, 0.0);
 
@@ -120,7 +121,7 @@ irect rotate_shape(poly * shape)
             shape->work[pt_index] = transform_point(shape->origin[pt_index]);
             if (first)
             {
-                  rct = irect{ shape->work[pt_index].x, shape->work[pt_index].y };
+                  rct = IntRect{ shape->work[pt_index].x, shape->work[pt_index].y };
                   first = 0;
             }
             else {
@@ -164,7 +165,7 @@ int load_shapes()
       const std::string & tmp = sstr.str();
       const char * cstr = tmp.c_str();
 
-      // irect tmp = VIEWBOX_RECT;
+      // IntRect tmp = VIEWBOX_RECT;
       mysql->exec_prepared(PREPARED_MAP1,
                            own_vessel.get_meters().x + VIEWBOX_RECT.left() * overlap_coeff,
                            own_vessel.get_meters().y + VIEWBOX_RECT.bottom() * overlap_coeff,
@@ -193,8 +194,8 @@ int load_shapes()
             shape.pathindex = new int[shape.path_count + 1];
             shape.points_count = mysql->get_myint("points");
             shape.pathindex[shape.path_count] = shape.points_count; // set closing point
-            shape.origin = new floatpt[shape.points_count];
-            shape.work = new intpt[shape.points_count];
+            shape.origin = new FloatPoint[shape.points_count];
+            shape.work = new IntPoint[shape.points_count];
 
             recid = mysql->get_myint("recid");
             shapes[recid] = shape;
@@ -269,10 +270,10 @@ uint64_t  update_map_data(uint64_t next_check)
 ////////////////////////////////////////////////////////////
 void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 {
-      irect test_box;
+      IntRect test_box;
       const vessel * v;
-      floatpt vessel_center, fp;
-      intpt int_center;
+      FloatPoint vessel_center, fp;
+      IntPoint int_center;
       int circle_size = imax((int)(6 * zoom), 3);
       for (const auto & vx : vessels)
       {
@@ -317,7 +318,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 
 
                               if (p == 0)
-                                    test_box = irect{ v->work[p].x, v->work[p].y };
+                                    test_box = IntRect{ v->work[p].x, v->work[p].y };
                               else
                               {
                                     test_box.minmax_expand(v->work[p]);
@@ -353,7 +354,7 @@ void draw_shapes(const ARGB fill_color, const ARGB outline_color)
 {
 
       //rotate box and get new bounds
-      irect new_box;
+      IntRect new_box;
       for (auto & shape : shapes)
             //auto const & ent1 : mymap
             //for (poly shape : shapes)
@@ -375,7 +376,7 @@ void draw_shapes(const ARGB fill_color, const ARGB outline_color)
 void draw_grid(double angle)
 {
 
-      floatpt fp;
+      FloatPoint fp;
       //const string sides = "ESWN";
       const std::string sides = " S N";
       for (int s = 0; s < 4; s++)
@@ -449,7 +450,7 @@ void draw_infoline()
 void draw_vessels_info() {
       const int LINE_HEIGHT = 12;
       //int left = ;
-      //irect info_rect{ CENTER_X * 2 ,0,screen->get_width() -1,screen->get_height() }
+      //IntRect info_rect{ CENTER_X * 2 ,0,screen->get_width() -1,screen->get_height() }
       int headers[4] = { 2, 20, 85, -2 };
       //w = screen->get_width() / 3;
       screen->fill_rect(INFO_RECT, 0x30FFFFFF);
@@ -469,7 +470,7 @@ void draw_vessels_info() {
       std::sort(mmsi.begin(), mmsi.end(), less_than_key());
 
       // draw header
-      int   y_coord = screen->get_height() - 2;
+      int   y_coord = INFO_RECT.top() - 2;
       screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[0], y_coord - 1, "CC", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
       screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[1], y_coord - 1, "MMSI", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
       screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[2], y_coord - 1, "SHIPNAME", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
@@ -526,13 +527,13 @@ void draw_frame()
       {
             // print `no GPS` and exit
             screen->rectangle(SCREEN_RECT, 0x001111);
-            screen->draw_text(FONT_NORMAL, screen->get_width() / 2, screen->get_height() / 2, "no GPS position", VALIGN_CENTER | HALIGN_CENTER, 0xFFFF00, clWhite);
+            //screen->draw_text(FONT_NORMAL, screen->get_width() / 2, screen->get_height() / 2, "no GPS position", VALIGN_CENTER | HALIGN_CENTER, 0xFFFF00, clWhite);
             return;
       }
       screen->fill_rect(SCREEN_RECT, clSea);
 
       //screen->draw_text(SPECCY_FONT, screen->get_width() / 2, 25, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
-      //floatpt mypos = own_vessel.get_pos();
+      //FloatPoint mypos = own_vessel.get_pos();
       //mypos.latlon2meter();
       // offset MYPOS from gps center to geometrical boat center
 
@@ -655,47 +656,31 @@ void video_loop_start() {
         }*/
 }
 ////////////////////////////////////////////////////////////
-
-
 int main()
 {
-   
-     
-      
-      
-      
-      
-      
-      
-      
-      
-      /* floatpt fp1 = { 24.9532280834854000,60.1674667786688000 },
-             fp2 = { 24.955862012736600,60.167291983683600 };
-       fp1.latlon2meter();
-       fp2.latlon2meter();
-       double d = fp1.distance(fp2);
-       */
-
       try {
+            // touch
+            touch = new   touch_manager();
+            
+            
+            // output
             screen = new video_driver(0); // debug purpose = 1 buffer, production value = 5
-            screen->fill_rect(SCREEN_RECT, clSea);
-            screen->flip();
-           
-
             if (screen->get_last_error())
             {
                   printf("video_init error: %d.\n", screen->get_last_error());
                   return 1;
             }
-            // screen->load_font(FONT_NORMAL, "/home/pi/projects/rpiais/font.bmp");
-             //screen->load_font(SPECCY_FONT, "/home/pi/projects/rpiais/speccy.bmp");
             screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
             screen->load_font(FONT_NORMAL, data_path("/img/normal.png"));
-
             img_minus = new image(data_path("/img/minus.png"));
             img_plus = new image(data_path("/img/plus.png"));
-            // img_test = new image("/home/pi/projects/rpiais/img/test3.png");
+            min_fit = imin(
+                  imin(CENTER_X, screen->width() - CENTER_X),
+                  imin(CENTER_Y, screen->height() - CENTER_Y)
+            ) - 20;
+            circle_radius = min_fit / 5;
 
+            // mysql
             mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
             if (mysql->get_last_error_str()) {
                   printf("mysql init error.\n%s\n", mysql->get_last_error_str());
@@ -703,19 +688,12 @@ int main()
 
             }
             init_db(mysql);
-            //load_dicts(mysql);
+           
 
-
-
-            min_fit = imin(
-                  imin(CENTER_X, screen->get_width() - CENTER_X),
-                  imin(CENTER_Y, screen->get_height() - CENTER_Y)
-            ) - 20;
-            circle_radius = min_fit / 5;
             
 
-            //  printf("input init error.\n");
-             // return 1;
+            
+
 
             zoom_changed(zoom_index);
 #if map_show==1

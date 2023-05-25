@@ -15,14 +15,7 @@
 #include <cmath>
 #include  <algorithm>
 
-#ifdef LINUX
 #include <sys/stat.h>
-#endif
-#ifdef WIN
-#include <windows.h>
-//#include <minwindef.h>
-#endif
-//#include <mysql.h>
 
 #define PI 3.141592653589793238462643383279
 #define PI180 PI/180.0
@@ -149,40 +142,22 @@ inline std::string dec2bin(uint32 v, int len = 0)
 
 
 inline uint64_t utc_ms() {
-
-#ifdef LINUX
       struct timespec t;
       clock_gettime(CLOCK_REALTIME, &t);
-
-#endif
-#ifdef WIN
-      struct timespec { long long tv_sec; long long tv_nsec; }t;    //header part
-      __int64 wintime;
-      GetSystemTimeAsFileTime((FILETIME *)&wintime);
-      wintime -= 116444736000000000i64;  //1jan1601 to 1jan1970
-      t.tv_sec = wintime / 10000000i64;           //seconds
-      t.tv_nsec = wintime % 10000000i64 * 100;      //nano-seconds
-#endif
       return t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 
 
 inline bool file_exists(const std::string & name) {
-#ifdef LINUX
       struct stat buffer;
       return (stat(name.c_str(), &buffer) == 0);
-#endif
-#ifdef WIN
-      std::ifstream infile(name.c_str());
-      return infile.good();
-#endif
 }
 
 
-struct  intpt
+struct  IntPoint
 {
       int x, y;
-      void offset_add(intpt t)
+      void offset_add(IntPoint t)
       {
             x += t.x;
             y += t.y;
@@ -192,13 +167,13 @@ struct  intpt
             x += _x;
             y += _y;
       }
-      void offset_remove(intpt t)
+      void offset_remove(IntPoint t)
       {
             x -= t.x;
             y -= t.y;
       }
 };
-struct  floatpt
+struct  FloatPoint
 {
 
 
@@ -242,12 +217,12 @@ struct  floatpt
                   y = log(tan(((90 + y) * PI) / 360)) / (PI / 180);
             y = (y * 20037508.34) / 180;
       }
-      inline void offset_remove(floatpt fp)
+      inline void offset_remove(FloatPoint fp)
       {
             x -= fp.x;
             y -= fp.y;
       }
-      int haversine(floatpt fp)
+      int haversine(FloatPoint fp)
       {
             double lat_delta = TO_RAD(fp.y - this->y),
                   lon_delta = TO_RAD(fp.x - this->x),
@@ -264,7 +239,7 @@ struct  floatpt
 
 
       }
-      inline intpt to_int()
+      inline IntPoint to_int()
       {
             return { (int)round(x),(int)round(y) };
       }
@@ -277,8 +252,11 @@ struct  floatpt
             return int(round(y));
       }
 };
-
-struct irect {
+struct IntCircle
+{
+      int32 x, y, r;
+};
+struct IntRect {
 private:
       int x1, y1, x2, y2;
 public:
@@ -288,9 +266,13 @@ public:
       int bottom() { return y1; }
       int top() { return y2; }
 
+      void set_left(int v) { x1 = v; }
+      void set_right(int v) { x2 = v; }
+      void set_bottom(int v) { y1 = v; }
+      void set_top(int v) { y2 = v; }
 
-      irect() {};
-      irect(int l, int b, int r, int t)
+      IntRect() {};
+      IntRect(int l, int b, int r, int t)
             //void assign_pos(int _x1, int _y1, int _x2, int _y2)
       {
             x1 = l;
@@ -298,15 +280,16 @@ public:
             x2 = r;
             y2 = t;
       }
-      irect(int lr, int tb) {
+      IntRect(int lr, int tb) {
             x1 = x2 = lr;
             y1 = y2 = tb;
       }
-      inline bool is_intersect(irect rct)
+      inline bool is_intersect(IntRect rct)
       {
             return ((x1 < rct.x2) && (rct.x1 < x2) && (y1 < rct.y2) && (rct.y1 < y2));
       }
       int get_width() { return x2 - x1; }
+      int get_height() { return y2 - y1; }
       int hcenter() { return x1 + (x2 - x1) / 2; }
       int vcenter() { return y1 + (y2 - y1) / 2; }
       void minmax_expand(int x, int y)
@@ -316,7 +299,7 @@ public:
             x2 = imax(x2, x);
             y2 = imax(y2, y);
       }
-      void minmax_expand(intpt pt)
+      void minmax_expand(IntPoint pt)
       {
             minmax_expand(pt.x, pt.y);
       }
@@ -328,7 +311,7 @@ public:
       /* void offset(int x, int y)
        {
        }
-       void offset(intpt pt)
+       void offset(IntPoint pt)
        {
              (pt.x, pt.y);
        }
@@ -336,16 +319,16 @@ public:
 };
 struct frect {
       double x1, y1, x2, y2;
-      floatpt get_corner(int index)
+      FloatPoint get_corner(int index)
       {
             switch (index) {
 
-                  case 1:	return floatpt{ x2,y1 };
-                  case 2:	return floatpt{ x2,y2 };
-                  case 3:	return floatpt{ x1,y2 };
+                  case 1:	return FloatPoint{ x2,y1 };
+                  case 2:	return FloatPoint{ x2,y2 };
+                  case 3:	return FloatPoint{ x1,y2 };
                   case 0:
                   default:
-                        return floatpt{ x1, y1 };
+                        return FloatPoint{ x1, y1 };
             }
       }
 };

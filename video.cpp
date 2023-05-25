@@ -9,14 +9,11 @@
 #include "video.h"
 #include "pixfont.h"
 
-#ifdef LINUX
 #include <unistd.h>
 #include <linux/fb.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include  <linux/kd.h>
-
-#endif
 
 
 #define FB_NO_ERROR 0;
@@ -32,7 +29,7 @@
 
 int CENTER_X, CENTER_Y;
 
-irect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
+IntRect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
 
 ////////////////////////////////////////////////////////////
 void video_driver::flip()
@@ -54,14 +51,17 @@ void video_driver::flip()
 video_driver::video_driver(int _buffer_count)
 {
       // open device
-      fb_fix_screeninfo finfo;
+      struct fb_fix_screeninfo finfo;
       fbdev = open("/dev/fb1", O_RDWR);
       if (!fbdev) { last_error = FB_OPEN_FAILED; return; }
 
       // get VINFO/FINFO and set buffer count
       if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) { last_error = FB_GET_VSCREENINFO_FAILED; return; }
+
       // setup screen numbers
-      pixel_count = vinfo.xres * vinfo.yres;
+      _width = vinfo.xres,
+            _height = vinfo.yres;
+      pixel_count = _width * _height;
       screen_size = pixel_count * vinfo.bits_per_pixel / 8;
 
       if (_buffer_count > 0)
@@ -106,16 +106,16 @@ video_driver::video_driver(int _buffer_count)
 
 
       // creating rects
-      CENTER_X = vinfo.xres / 3;
-      CENTER_Y = vinfo.yres / 2;
-      VIEWBOX_RECT = irect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
-      SCREEN_RECT = irect{ 0, 0, vinfo.xres - 1, vinfo.yres - 1 };
-      INFO_RECT = irect{ CENTER_X * 2, 0, vinfo.xres - 1, vinfo.yres - 1 };
+      CENTER_X = _width / 3,
+            CENTER_Y = _height / 2;
+      VIEWBOX_RECT = IntRect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
+      SCREEN_RECT = IntRect{ 0, 0, _width - 1, _height - 1 };
+      INFO_RECT = IntRect{ CENTER_X * 2, 0,_width - 1, _height - 1 };
       WINDOW_RECT = SCREEN_RECT;
       WINDOW_RECT.collapse(20, 20);
 
       // init fill 
-      et = new bucketset[vinfo.yres];
+      et = new bucketset[_height];
 
       last_error = FB_NO_ERROR;
 }
@@ -129,55 +129,40 @@ video_driver::~video_driver() {
 }
 
 ////////////////////////////////////////////////////////////
-inline void video_driver::draw_pix(const int x, const int y, const ARGB color) {
+inline void video_driver::draw_pix(const int32 x, const int32 y, const ARGB color) {
       if (x < 0) return;
       if (y < 0) return;
-      if (x >= vinfo.xres) return;
-      if (y >= vinfo.yres) return;
+      if (x >= _width) return;
+      if (y >= _height) return;
       //puint8 addr = (puint8)(pix_ptr - y * SCANLINE_LEN + x * BYTES_PER_PIXEL);
-      PIX_PTR addr = pix_buf + (vinfo.yres - y - 1) * vinfo.xres + x;
+      PIX_PTR addr = pix_buf + (_height - y - 1) * _width + x;
 
       int alpha = color >> 24;
 
-      if (vinfo.bits_per_pixel == 16) {
-            //WARN_FLOATCONVERSION_OFF
-              //    WARN_CONVERSION_OFF
-            if (alpha == 0) // no transparency at all
-                  *((puint16)addr) = rgb888to565(color);
-            else if (alpha != 255) // has semi-transparency
-            {
-                  float a = (float)alpha / 255.0f, ia = 1.0f - a;
-                  uint16 c = *((puint16)addr);
-
-                  uint32 r = ((color & 0x00FF0000) >> 8) * ia + (c & 0xF800) * a;
-                  uint32 g = ((color & 0x0000FF00) >> 5) * ia + (c & 0x07E0) * a;
-                  uint32 b = ((color & 0x000000FF) >> 3) * ia + (c & 0x001F) * a;
-
-                  *((puint16)addr) = (r & 0xF800) | (g & 0x07E0) | (b & 0x001F);
-
-            }
-            //WARN_RESTORE                  WARN_RESTORE
+      if (alpha == 0)
+      {
+            // no transparency at all
+            *((puint16)addr) = rgb888to565(color);
       }
-      else {
-            if (alpha == 0) // no transparency, simple put color
-                  *((puint32)addr) = color;
-            else if (alpha != 255) {
-                  float a = (float)alpha / 255.0f, ia = 1.0f - a;
-                  *addr = ((color >> 24) & 0xFF) * a + *addr * ia;
-                  addr++;
-                  *addr = ((color >> 16) & 0xFF) * a + *addr * ia;
-                  addr++;
-                  *addr = ((color >> 8) & 0xFF) * a + *addr * ia;
-                  addr++;
-                  *addr = 0;
-            }
-            *((puint32)addr) = color;
+      else if (alpha != 255) // has semi-transparency
+      {
+            float a = (float)alpha / 255.0f, ia = 1.0f - a;
+            uint16 c = *((puint16)addr);
+
+            uint32 r = ((color & 0x00FF0000) >> 8) * ia + (c & 0xF800) * a;
+            uint32 g = ((color & 0x0000FF00) >> 5) * ia + (c & 0x07E0) * a;
+            uint32 b = ((color & 0x000000FF) >> 3) * ia + (c & 0x001F) * a;
+
+            *((puint16)addr) = (r & 0xF800) | (g & 0x07E0) | (b & 0x001F);
 
       }
 
 
 }
-void video_driver::rectangle(irect rct, const ARGB color) {
+
+
+
+void video_driver::rectangle(IntRect rct, const ARGB color) {
       int i;
       for (i = rct.left(); i < rct.right(); i++)
       {
@@ -195,7 +180,7 @@ void video_driver::fill_rect(int x0, int y0, int x1, int y1, const ARGB color) {
             for (int x = x0; x <= x1; x++)
                   draw_pix(x, y, color);
 }
-void video_driver::fill_rect(irect rct, const ARGB color) {
+void video_driver::fill_rect(IntRect rct, const ARGB color) {
       fill_rect(rct.left(), rct.bottom(), rct.right(), rct.top(), color);
 }
 void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
@@ -232,14 +217,14 @@ void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
 void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 { //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
-      if (xe < 0 || xs >= vinfo.xres) return;
+      if (xe < 0 || xs >= _width) return;
 
       // clip start & end to window bounds
       if (xs < 0) xs = 0;
-      if (xe >= vinfo.xres) xe = vinfo.xres - 1;
+      if (xe >= _width) xe = _width - 1;
 
       xe -= xs;
-      PIX_PTR addr = pix_buf + (vinfo.yres - y - 1) * vinfo.xres + xs;
+      PIX_PTR addr = pix_buf + (_height - y - 1) * _width + xs;
       uint16 c = rgb888to565(color);
       while (xe--)
             *(addr++) = c;
@@ -286,11 +271,11 @@ void video_driver::draw_image(image * img, int x, int y, int flags, int transpar
 
       if ((flags & VALIGN_CENTER) == VALIGN_CENTER)            y += img->height() / 2;
       else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)            y += img->height();
-//      WARN_FLOATCONVERSION_OFF
-            //WARN_CONVERSION_OFF
-            // transparency = 255- transparency ;
-            puint8 src = img->data_ptr();
-      PIX_PTR dst_start = pix_buf + (vinfo.yres - y - 1) * vinfo.xres + x,
+      //      WARN_FLOATCONVERSION_OFF
+                  //WARN_CONVERSION_OFF
+                  // transparency = 255- transparency ;
+      puint8 src = img->data_ptr();
+      PIX_PTR dst_start = pix_buf + (_height - y - 1) * _width + x,
             dst_current;
       uint8 r, g, b;
       float a, ia;
@@ -310,9 +295,9 @@ void video_driver::draw_image(image * img, int x, int y, int flags, int transpar
                   // combine colors
                   *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); dst_current++;
             }
-            dst_start += vinfo.xres; // proceed to next line
+            dst_start += _width; // proceed to next line
       }
-   //   WARN_RESTORE            WARN_RESTORE
+      //   WARN_RESTORE            WARN_RESTORE
 
 }
 void video_driver::circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill)
@@ -418,7 +403,7 @@ void _insertionSort(bucketset * b) {
 void video_driver::edge_tables_reset()
 {
       aet.cnt = 0;
-      for (int i = 0; i < vinfo.yres; i++)
+      for (int i = 0; i < _height; i++)
             et[i].cnt = 0;
 }
 void video_driver::edge_store_tuple_float(bucketset * b, int y_end, double  x_start, double  slope)
@@ -441,11 +426,11 @@ void video_driver::edge_store_tuple_int(bucketset * b, int y_end, double  x_star
       //	_insertionSort(b);
 
 }
-void video_driver::edge_store_table(intpt pt1, intpt pt2) {
+void video_driver::edge_store_table(IntPoint pt1, IntPoint pt2) {
       double dx, dy, slope;
 
       // if both points lies below or above viewable rect - edge skipped
-      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= vinfo.yres and pt2.y >= vinfo.yres))
+      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= _height and pt2.y >= _height))
             return;
       dy = pt1.y - pt2.y;
 
@@ -528,7 +513,7 @@ void video_driver::edge_remove_byY(bucketset * b, int scanline_no)
 ////////////////////////////////////////////////////////////
 void video_driver::calc_fill(const poly * sh) {
 
-      intpt prev_point, point;
+      IntPoint prev_point, point;
       int path_end, point_id = 0;
       for (int path_id = 0; path_id < sh->path_count; path_id++)
       {
@@ -555,7 +540,7 @@ void video_driver::draw_fill(const ARGB color)
       }*/
 
 
-      for (int scanline_no = 0; scanline_no < vinfo.yres; scanline_no++)
+      for (int scanline_no = 0; scanline_no < _height; scanline_no++)
       {
             for (int b = 0; b < et[scanline_no].cnt; b++)
             {
@@ -594,7 +579,7 @@ void video_driver::draw_outline(const poly * sh, const ARGB color)
 {
 
 
-      intpt //* prev_point,
+      IntPoint //* prev_point,
             * point;
       int path_end, point_id = 0;
       for (int path_id = 0; path_id < sh->path_count; path_id++)
@@ -676,11 +661,11 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
 
       int32 scanline_current, y_cnt, x_cnt, x_pos;
       puint32 data;
-      uint32 font_pix, clr, a;
+      uint32 font_pix, clr;
       //ARGB temp_color, paste_color = color & 0xFFFFFF;
       for (char & c : s) {
 
-            if (x >= vinfo.xres) return; // go away if next char outside screen
+            if (x >= _width) return; // go away if next char outside screen
 
             ch_info = fonts[font_index].get_char_info(c);
             if (ch_info)

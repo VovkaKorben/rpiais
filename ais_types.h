@@ -9,8 +9,8 @@
 struct poly {
 
       int points_count;
-      floatpt * origin;
-      intpt * work;
+      FloatPoint * origin;
+      IntPoint * work;
       uint64_t last_access;
 
       int path_count;
@@ -39,7 +39,7 @@ public:
       std::string shipname, callsign;
       poly figure;
       bool size_ok, pos_ok, angle_ok;
-      floatpt gps;
+      FloatPoint gps;
       void eval_mid(uint32 mmsi)
       {
             switch (mmsi / 100000000) // check first digit
@@ -79,8 +79,8 @@ public:
 #endif
 
             points_count = 5;
-            origin = new floatpt[5];
-            work = new intpt[5];
+            origin = new FloatPoint[5];
+            work = new IntPoint[5];
 
             path_count = 1;
             pathindex = new int[2];
@@ -103,19 +103,19 @@ private:
       // glonass 1
       // prev pos 0
       int pos_count;
-      std::vector<floatpt> pos_arr;
+      std::vector<FloatPoint> pos_arr;
 
       int pos_priority, heading;
       bool heading_set, relative;
-      floatpt gps, meters;
+      FloatPoint gps, meters;
 
 public:
       /////////////////////////////////////////////////////////////////////////
-      inline floatpt get_gps()
+      inline FloatPoint get_gps()
       {
             return pos_arr[pos_priority];
       };
-      inline floatpt get_meters()
+      inline FloatPoint get_meters()
       {
             return meters;
       };
@@ -123,7 +123,7 @@ public:
       {
             return pos_priority >= 0;
       };
-      void set_pos(floatpt position_gps, int priority)
+      void set_pos(FloatPoint position_gps, int priority)
       {
             if (priority < 0 || priority >= pos_count)
                   throw "own_vessel_class: priority index error";
