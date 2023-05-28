@@ -1,3 +1,6 @@
+#pragma GCC diagnostic ignored "-Wfloat-conversion"
+#pragma GCC diagnostic ignored "-Wconversion"
+
 
 #include <algorithm>
 #include <fcntl.h>
@@ -29,7 +32,7 @@
 
 int CENTER_X, CENTER_Y;
 
-IntRect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
+IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
 
 ////////////////////////////////////////////////////////////
 void video_driver::flip()
@@ -48,11 +51,15 @@ void video_driver::flip()
       }
       last_error = FB_NO_ERROR;
 }
-video_driver::video_driver(int _buffer_count)
+
+
+
+
+video_driver::video_driver(const char * devname, int _buffer_count)
 {
       // open device
       struct fb_fix_screeninfo finfo;
-      fbdev = open("/dev/fb1", O_RDWR);
+      fbdev = open(devname, O_RDWR);
       if (!fbdev) { last_error = FB_OPEN_FAILED; return; }
 
       // get VINFO/FINFO and set buffer count
@@ -110,9 +117,9 @@ video_driver::video_driver(int _buffer_count)
             CENTER_Y = _height / 2;
       VIEWBOX_RECT = IntRect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
       SCREEN_RECT = IntRect{ 0, 0, _width - 1, _height - 1 };
-      INFO_RECT = IntRect{ CENTER_X * 2, 0,_width - 1, _height - 1 };
+      SHIPLIST_RECT = IntRect{ CENTER_X * 2, 0,_width - 1, _height - 1 };
       WINDOW_RECT = SCREEN_RECT;
-      WINDOW_RECT.collapse(20, 20);
+      WINDOW_RECT.collapse(50, 50);
 
       // init fill 
       et = new bucketset[_height];
@@ -164,12 +171,12 @@ inline void video_driver::draw_pix(const int32 x, const int32 y, const ARGB colo
 
 void video_driver::rectangle(IntRect rct, const ARGB color) {
       int i;
-      for (i = rct.left(); i < rct.right(); i++)
+      for (i = rct.left(); i <= rct.right(); i++)
       {
             draw_pix(i, rct.bottom(), color);
             draw_pix(i, rct.top(), color);
       }
-      for (i = rct.bottom() + 1; i < rct.top() - 1; i++)
+      for (i = rct.bottom() + 1; i < rct.top(); i++)
       {
             draw_pix(rct.left(), i, color);
             draw_pix(rct.right(), i, color);
@@ -300,18 +307,18 @@ void video_driver::draw_image(image * img, int x, int y, int flags, int transpar
       //   WARN_RESTORE            WARN_RESTORE
 
 }
-void video_driver::circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill)
+void video_driver::circle(const IntCircle circle, const ARGB outline, const ARGB fill)
 {
       if (fill != clNone) {
-            int f = 1 - radius;
+            int f = 1 - circle.r;
             int ddF_x = 0;
-            int ddF_y = -2 * radius;
+            int ddF_y = -2 * circle.r;
             int x = 0;
-            int y = radius;
+            int y = circle.r;
 
-            draw_line_fast(cy, cx - radius, cx + radius, fill);
-            draw_pix(cx, cy + radius, fill);
-            draw_pix(cx, cy - radius, fill);
+            draw_line_fast(circle.y, circle.x - circle.r, circle.x + circle.r, fill);
+            draw_pix(circle.x, circle.y + circle.r, fill);
+            draw_pix(circle.x, circle.y - circle.r, fill);
 
 
 
@@ -327,27 +334,27 @@ void video_driver::circle(const int cx, const int cy, const int radius, const AR
                   ddF_x += 2;
                   f += ddF_x + 1;
 
-                  draw_line_fast(cy + y, cx - x, cx + x, fill);
-                  draw_line_fast(cy - y, cx - x, cx + x, fill);
+                  draw_line_fast(circle.y + y, circle.x - x, circle.x + x, fill);
+                  draw_line_fast(circle.y - y, circle.x - x, circle.x + x, fill);
 
-                  draw_line_fast(cy - x, cx - y, cx + y, fill);
-                  draw_line_fast(cy + x, cx - y, cx + y, fill);
+                  draw_line_fast(circle.y - x, circle.x - y, circle.x + y, fill);
+                  draw_line_fast(circle.y + x, circle.x - y, circle.x + y, fill);
 
 
             }
       }
       if (outline != clNone) {
-            int f = 1 - radius;
+            int f = 1 - circle.r;
             int ddF_x = 0;
-            int ddF_y = -2 * radius;
+            int ddF_y = -2 * circle.r;
             int x = 0;
-            int y = radius;
+            int y = circle.r;
 
 
-            draw_pix(cx, cy + radius, outline);
-            draw_pix(cx, cy - radius, outline);
-            draw_pix(cx + radius, cy, outline);
-            draw_pix(cx - radius, cy, outline);
+            draw_pix(circle.x - x, circle.y + circle.r, outline);
+            draw_pix(circle.x - x, circle.y - circle.r, outline);
+            draw_pix(circle.x - x + circle.r, circle.y, outline);
+            draw_pix(circle.x - x - circle.r, circle.y, outline);
 
             while (x < y)
             {
@@ -362,14 +369,14 @@ void video_driver::circle(const int cx, const int cy, const int radius, const AR
                   f += ddF_x + 1;
 
 
-                  draw_pix(cx + x, cy + y, outline);
-                  draw_pix(cx - x, cy + y, outline);
-                  draw_pix(cx + x, cy - y, outline);
-                  draw_pix(cx - x, cy - y, outline);
-                  draw_pix(cx + y, cy + x, outline);
-                  draw_pix(cx - y, cy + x, outline);
-                  draw_pix(cx + y, cy - x, outline);
-                  draw_pix(cx - y, cy - x, outline);
+                  draw_pix(circle.x + x, circle.y + y, outline);
+                  draw_pix(circle.x - x, circle.y + y, outline);
+                  draw_pix(circle.x + x, circle.y - y, outline);
+                  draw_pix(circle.x - x, circle.y - y, outline);
+                  draw_pix(circle.x + y, circle.y + x, outline);
+                  draw_pix(circle.x - y, circle.y + x, outline);
+                  draw_pix(circle.x + y, circle.y - x, outline);
+                  draw_pix(circle.x - y, circle.y - x, outline);
             }
       }
 

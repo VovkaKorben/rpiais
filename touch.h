@@ -11,6 +11,10 @@
 #include <unordered_map>
 #include <utility>
 
+#ifndef NDEBUG 
+#include "video.h" // 
+#endif
+
 #define TOUCH_GROUP_ZOOM 0
 #define TOUCH_GROUP_SHIPSHAPE 1
 #define TOUCH_GROUP_SHIPLIST 2
@@ -19,11 +23,15 @@
 
 #define TOUCH_TYPE_RECT 0
 #define TOUCH_TYPE_CIRCLE 1
-struct touches_s
+
+struct touches_c
 {
       int32 x, y, p;
 };
-
+struct touches_coords
+{
+      touches_c raw, adjusted;
+};
 class touchscreen
 {
 private:
@@ -35,7 +43,7 @@ private:
       void t_func();
 
 
-      std::vector<touches_s> touches;
+      std::vector<touches_coords> touches;
 
       //IntRect phys;
       //int screen_w, screen_h;
@@ -46,7 +54,7 @@ private:
       // long getTouchSample(int * x, int * y, int * p);
 public:
       size_t count();
-      bool pop(touches_s & t);
+      bool pop(touches_coords & t);
       // const char * get_name() { return devname; }
       touchscreen(const char * devname, int32 w, int32 h);
       ~touchscreen();
@@ -81,24 +89,36 @@ struct touch_coords
             }
       }
 };
-typedef std::pair<int, int> IntPair;
+struct touch_group_params {
+      int32 priority, active;
+};
+typedef int32 touch_group_id;
+typedef std::pair<touch_group_id, touch_group_params> touch_group_info;
 class touch_manager
 {
 private:
-      std::vector <IntPair> priority;
+      std::vector <touch_group_info> groups;
       std::unordered_map<int, std::vector <touch_coords>> areas;
       int check_exists(int group_index);
       void sort_by_priority();
 public:
       touch_manager();
       ~touch_manager();
-      int add_group(int32 group_index, int32 priority);
+      int set_group_active(int32 group_index, int32 active);
+      int add_group(int32 group_index, int32 priority, int32 active = 1);
       int clear_group(int32 group_index);
       int add_rect(int32 group_index, std::string shapename, IntRect rct);
       int add_point(int32 group_index, std::string shapename, IntCircle circle);
       void dump();
       int check_point(const int32 x, const int32 y, int32 & group_index, std::string & shapename);
       //int check_point(const int32 x, const int32 y, int32 & group_index, int32 & area_index);
+#ifndef NDEBUG
+      void debug(video_driver * screen);
+#endif // !1
+
+
+
+
 };
 
 #endif

@@ -1,12 +1,7 @@
 #define map_show 1
 #define vessels_show 1
 
-#ifdef LINUX
 #include <unistd.h>
-#endif 
-
-
-
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -33,11 +28,12 @@ image * img_minus, * img_plus;
 int last_msg_id = 1;// 111203 - 1;
 std::map <int, poly>  shapes;
 
-int show_info_window = 1;
+int show_info_window = 0;
 //using namespace std;
 video_driver * screen;
 mysql_driver * mysql;
-touch_manager * touch;
+touchscreen * touchscr;
+touch_manager * touchman;
 
 const int max_zoom_index = 9;
 const int ZOOM_RANGE[max_zoom_index] = { 50, 120,200,300, 1000, 2000, 3000, 5000,10000 };
@@ -339,7 +335,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
                   }
                   else
                   { //unknown size or angle, just draw small circle with position
-                        screen->circle(int_center.x, int_center.y, circle_size, 0x00000000, 0x0000FF00);
+                        screen->circle({ int_center.x, int_center.y, circle_size }, 0x00000000, 0x0000FF00);
                   }
 
             }
@@ -376,7 +372,7 @@ void draw_shapes(const ARGB fill_color, const ARGB outline_color)
 void draw_grid(double angle)
 {
 
-      FloatPoint fp;
+      FloatPoint fp = { 0.0,0.0 };
       //const string sides = "ESWN";
       const std::string sides = " S N";
       for (int s = 0; s < 4; s++)
@@ -401,7 +397,7 @@ void draw_grid(double angle)
       for (int i = 1; i < 6; i++)
       {
             // distance circle
-            screen->circle(CENTER_X, CENTER_Y, i * circle_radius, 0xF0000000, clNone);
+            screen->circle({ CENTER_X, CENTER_Y, i * circle_radius }, 0xF0000000, clNone);
 
             // distance marks
             fp.x = -angle;
@@ -416,18 +412,6 @@ void draw_grid(double angle)
       }
 
 }
-
-struct less_than_key
-{
-      inline bool operator() (const int & mmsi0, const int & mmsi1)
-      {
-            double d0 = vessels[mmsi0].distance, d1 = vessels[mmsi1].distance;
-            if (std::isnan(d0)) return false;
-            else if (std::isnan(d1)) return true;
-            else return d0 < d1;
-
-      }
-};
 void draw_infoline()
 {
       const int HMARGIN = 15;
@@ -437,7 +421,7 @@ void draw_infoline()
 
       std::time_t now = sysclock_t::to_time_t(sysclock_t::now());
 
-      
+
       std::strftime(buf, sizeof(buf), "%H:%M:%S", std::localtime(&now));
       screen->draw_text(FONT_OUTLINE, CENTER_X - HMARGIN, VMARGIN + 10, std::string(buf), VALIGN_BOTTOM | HALIGN_RIGHT, clBlack, clLand, true);
       std::strftime(buf, sizeof(buf), "%w, %e %b", std::localtime(&now));
@@ -448,12 +432,23 @@ void draw_infoline()
 
 }
 void draw_vessels_info() {
+      struct less_than_key
+      {
+            inline bool operator() (const int & mmsi0, const int & mmsi1)
+            {
+                  double d0 = vessels[mmsi0].distance, d1 = vessels[mmsi1].distance;
+                  if (std::isnan(d0)) return false;
+                  else if (std::isnan(d1)) return true;
+                  else return d0 < d1;
+
+            }
+      };
       const int LINE_HEIGHT = 12;
       //int left = ;
       //IntRect info_rect{ CENTER_X * 2 ,0,screen->get_width() -1,screen->get_height() }
       int headers[4] = { 2, 20, 85, -2 };
       //w = screen->get_width() / 3;
-      screen->fill_rect(INFO_RECT, 0x30FFFFFF);
+      screen->fill_rect(SHIPLIST_RECT, 0x30FFFFFF);
 
       // get all MMSI to vector + alculate distance
       std::vector<int> mmsi;
@@ -470,11 +465,11 @@ void draw_vessels_info() {
       std::sort(mmsi.begin(), mmsi.end(), less_than_key());
 
       // draw header
-      int   y_coord = INFO_RECT.top() - 2;
-      screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[0], y_coord - 1, "CC", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-      screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[1], y_coord - 1, "MMSI", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-      screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[2], y_coord - 1, "SHIPNAME", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-      screen->draw_text(FONT_NORMAL, INFO_RECT.right() + headers[3], y_coord - 1, "DIST", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      int   y_coord = SHIPLIST_RECT.top() - 2;
+      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[0], y_coord - 1, "CC", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[1], y_coord - 1, "MMSI", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[2], y_coord - 1, "SHIPNAME", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.right() + headers[3], y_coord - 1, "DIST", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
       y_coord -= LINE_HEIGHT;
 
       // draw ship list
@@ -490,12 +485,12 @@ void draw_vessels_info() {
                   if (mid_country.count(ccode) != 0)
                   {
                         //image * img = &mid_country[ccode];
-                        screen->draw_image(&mid_country[ccode], INFO_RECT.left() + 2, y_coord, VALIGN_TOP | HALIGN_LEFT);
+                        screen->draw_image(&mid_country[ccode], SHIPLIST_RECT.left() + 2, y_coord, VALIGN_TOP | HALIGN_LEFT);
                   }
             }
             else
             { // no mid info found, just out mid code
-                  screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[0], y_coord, string_format("%d", mid), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                  screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[0], y_coord, string_format("%d", mid), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
             }
             /*
                       struct mid_struct_s
@@ -507,9 +502,9 @@ void draw_vessels_info() {
                       extern std::map<std::string, image> mid_country;
                       */
 
-            screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[1], y_coord - 1, string_format("%d", mmsi[i]), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-            screen->draw_text(FONT_NORMAL, INFO_RECT.left() + headers[2], y_coord - 1, vessels[mmsi[i]].shipname, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-            screen->draw_text(FONT_NORMAL, INFO_RECT.right() + headers[3], y_coord - 1, string_format("%d", vessels[mmsi[i]].distance), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[1], y_coord - 1, string_format("%d", mmsi[i]), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[2], y_coord - 1, vessels[mmsi[i]].shipname, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.right() + headers[3], y_coord - 1, string_format("%d", vessels[mmsi[i]].distance), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
             y_coord -= LINE_HEIGHT;
       }
 
@@ -519,9 +514,20 @@ void draw_vessels_info() {
 
 
 }
+
+void draw_infowindow()
+{
+      if (show_info_window != 0)
+      {
+            // draw window
+            screen->fill_rect(WINDOW_RECT, 0x20000000);
+            screen->rectangle(WINDOW_RECT, clBlack);
+      }
+
+}
 void draw_frame()
 {
-     
+
 
       if (!own_vessel.pos_ok())
       {
@@ -549,38 +555,76 @@ void draw_frame()
 #if vessels_show==1
       draw_vessels(0xcd8183, clBlack);
 #endif
-
-
-
-
       draw_vessels_info();
-
 
       // plus and minus images
       screen->draw_image(img_minus, 10, 307, HALIGN_LEFT | VALIGN_TOP, 150);
       screen->draw_image(img_plus, 272, 316, HALIGN_LEFT | VALIGN_TOP, 150);
 
-
-      if (show_info_window != 0)
-            if (false)
-            {
-                  // draw window
-                  screen->fill_rect(WINDOW_RECT, 0x20000000);
-                  screen->rectangle(WINDOW_RECT, 0x000000);
-            }
       draw_infoline();
-//      screen->upd_pixtoast();
+
+      int x = SHIPLIST_RECT.left() + 5, y = SHIPLIST_RECT.bottom() + 5;
+      screen->draw_text(FONT_NORMAL, x, y, string_format("ZOOM #%d %f", zoom_index, zoom), VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clNone);
+
+      draw_infowindow();
 }
 
 ////////////////////////////////////////////////////////////
+void process_touches() {
+      touchman->debug(screen);
+      std::string name;
+      int32 gi;
+      touches_coords t;
+      //touchman->check_point(30, 300, gi, name);
+      while (touchscr->pop(t))
+      {
+            printf("Touch: %d,%d ", t.adjusted.x, t.adjusted.y);
+
+            if (touchman->check_point(t.adjusted.x, t.adjusted.y, gi, name))
+            {
+                  switch (gi)
+                  {
+                        case TOUCH_GROUP_ZOOM: {
+                              if (!name.compare("zoomin"))
+                              {
+                                    zoom_changed(zoom_index - 1);
+                              }
+                              else if (!name.compare("zoomout"))
+                              {
+                                    zoom_changed(zoom_index + 1);
+                              }
+
+                              break;
+                        }
+                        case TOUCH_GROUP_INFO:
+                        {
+                              show_info_window = 1; // show environment
+                              break;
+                        }
+                        case TOUCH_GROUP_INFOWINDOW:
+                        {
+                              show_info_window = 0; // hide info window
+                              break;
+                        }
+                        default:
+                        {
+                              printf("Unhandled touch group: %d", gi);
+                              break;
+                        }
+                  }
+
+                  //printf("(group %d, name: %s)\n", gi, name.c_str());
+            }
+            else
+                  printf("(not found)\n");
+      }
 
 
-inline unsigned long long tm_diff(timespec c, timespec p)
-{
-      unsigned long long s = c.tv_sec - p.tv_sec, n = c.tv_nsec - p.tv_nsec;
-      return s * 1000000 + n / 1000;
+
+
 
 }
+////////////////////////////////////////////////////////////
 void video_loop_start() {
       /*
       const int FPS = 60;
@@ -602,14 +646,15 @@ void video_loop_start() {
 
             last_msg_id = update_nmea(last_msg_id);
             draw_frame();
-            
+            process_touches();
 
 
             frames++;
             //fps_str = "none";            screen->draw_text(FONT_NORMAL, 5, 5, fps_str, 0xFFFF00, VALIGN_BOTTOM | HALIGN_LEFT);
 
-            screen->flip();
 
+            screen->flip();
+            usleep(100000);
       }
 
       /*  clock_gettime(CLOCK_REALTIME, &measure_start);
@@ -656,43 +701,60 @@ void video_loop_start() {
         }*/
 }
 ////////////////////////////////////////////////////////////
+
+void init_video() {
+      screen = new video_driver("/dev/fb1", 0); // debug purpose = 1 buffer, production value = 5
+      if (screen->get_last_error())
+      {
+            printf("video_init error: %d.\n", screen->get_last_error());
+            return;
+      }
+      screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
+      screen->load_font(FONT_NORMAL, data_path("/img/normal.png"));
+      img_minus = new image(data_path("/img/minus.png"));
+      img_plus = new image(data_path("/img/plus.png"));
+      min_fit = imin(
+            imin(CENTER_X, screen->width() - CENTER_X),
+            imin(CENTER_Y, screen->height() - CENTER_Y)
+      ) - 20;
+      circle_radius = min_fit / 5;
+}
+void init_touch() {
+      touchscr = new   touchscreen("/dev/input/event1", screen->width(), screen->height());
+      touchman = new touch_manager();
+
+      touchman->add_group(TOUCH_GROUP_ZOOM, 15);
+      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomout", { 29,297 , 23 });
+      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomin", { 291,297 , 23 });
+
+
+      touchman->add_group(TOUCH_GROUP_SHIPSHAPE, 5);
+      touchman->add_group(TOUCH_GROUP_SHIPLIST, 12);
+      //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
+
+      touchman->add_group(TOUCH_GROUP_INFO, 10);
+      touchman->add_rect(TOUCH_GROUP_INFO, "info", { 0,0,480,40 });
+
+      touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
+      touchman->add_rect(TOUCH_GROUP_INFOWINDOW, "window", WINDOW_RECT);
+}
+void init_database() {
+      mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
+      if (mysql->get_last_error_str()) {
+            printf("mysql init error.\n%s\n", mysql->get_last_error_str());
+            return;
+
+      }
+      init_db(mysql);
+}
 int main()
 {
       try {
-            // touch
-            touch = new   touch_manager();
-            
-            
-            // output
-            screen = new video_driver(0); // debug purpose = 1 buffer, production value = 5
-            if (screen->get_last_error())
-            {
-                  printf("video_init error: %d.\n", screen->get_last_error());
-                  return 1;
-            }
-            screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
-            screen->load_font(FONT_NORMAL, data_path("/img/normal.png"));
-            img_minus = new image(data_path("/img/minus.png"));
-            img_plus = new image(data_path("/img/plus.png"));
-            min_fit = imin(
-                  imin(CENTER_X, screen->width() - CENTER_X),
-                  imin(CENTER_Y, screen->height() - CENTER_Y)
-            ) - 20;
-            circle_radius = min_fit / 5;
+            init_video();
+            init_touch();
+            init_database();
 
-            // mysql
-            mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
-            if (mysql->get_last_error_str()) {
-                  printf("mysql init error.\n%s\n", mysql->get_last_error_str());
-                  return 1;
 
-            }
-            init_db(mysql);
-           
-
-            
-
-            
 
 
             zoom_changed(zoom_index);
@@ -710,3 +772,5 @@ int main()
       }
       return 0;
 }
+
+

@@ -65,16 +65,13 @@ _Pragma("warning(default  : 4267)");
 inline  std::string data_path(std::string rel_path)
 {
       std::string root;
-#ifdef LINUX
       root = "/home/pi/data";
-#endif
-#ifdef WIN
-      root = "C:\\ais\\rpiais\\data";
-      const char WINDOWS_FILE_PATH_SEPARATOR = '\\';
-      const char UNIX_FILE_PATH_SEPARATOR = '/';
-
-      std::replace(rel_path.begin(), rel_path.end(), UNIX_FILE_PATH_SEPARATOR, WINDOWS_FILE_PATH_SEPARATOR);
-#endif
+      //#ifdef WIN
+      //      root = "C:\\ais\\rpiais\\data";
+      //      const char WINDOWS_FILE_PATH_SEPARATOR = '\\';
+      //      const char UNIX_FILE_PATH_SEPARATOR = '/';
+      //      std::replace(rel_path.begin(), rel_path.end(), UNIX_FILE_PATH_SEPARATOR, WINDOWS_FILE_PATH_SEPARATOR);
+      //#endif
       return root + rel_path;
 
 }
@@ -374,6 +371,12 @@ inline std::vector<std::string> str_split(const char * str, char c = ',')
 }
 
 
+inline unsigned long long tm_diff(timespec c, timespec p)
+{
+      unsigned long long s = c.tv_sec - p.tv_sec, n = c.tv_nsec - p.tv_nsec;
+      return s * 1000000 + n / 1000;
+
+}
 
 
 

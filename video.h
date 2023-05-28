@@ -12,7 +12,11 @@ const ARGB clLand = 0xb7b074;
 const ARGB clBlack = 0x000000;
 const ARGB clWhite = 0xFFFFFF;
 const ARGB clNone = 0xFFFFFFFF;
-extern IntRect VIEWBOX_RECT, SCREEN_RECT, INFO_RECT, WINDOW_RECT;
+const ARGB clLtGray = 0xC0C0C0;
+const ARGB clGray = 0x808080;
+const ARGB clRed = 0xFF0000;
+
+extern IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
 extern int32 CENTER_X, CENTER_Y;
 
 
@@ -86,7 +90,7 @@ private:
       void draw_polyline(int x, int y, const ARGB color, int close_polyline = 0);
 public:
       void flip();
-      video_driver(int _buffer_count = 1);
+      video_driver(const char * devname, int _buffer_count = 1);
       ~video_driver();
       int get_last_error() { return last_error; };
       int width() { return _width; };
@@ -101,7 +105,7 @@ public:
       //void draw_text(int font_index, int x, int y, std::string s, int flags);
       void draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap, bool dbg = false);
       void draw_image(image * img, int x, int y, int flags, int transparency = 255); // 255 mean full visible, 0 mean none visible
-      void circle(const int cx, const int cy, const int radius, const ARGB outline, const ARGB fill);
+      void circle(const IntCircle circle, const ARGB outline, const ARGB fill);
 };
 
 

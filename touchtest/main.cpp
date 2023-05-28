@@ -13,7 +13,7 @@
 #include <mutex>
 #include <csignal>
 
-#include <pthread.h>
+//#include <pthread.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -63,14 +63,14 @@ int main()
       touchman->add_group(TOUCH_GROUP_INFO, 10);
       touchman->add_rect(TOUCH_GROUP_INFO, "info", { 0,0,480,40 });
       
-
-
+      touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30,0);
+      touchman->add_rect(TOUCH_GROUP_INFOWINDOW, "window", { 20,20,440,280 });
       touchman->dump();
 
       printf("---------------------------------\n");
       std::string name;
       int32 gi;
-      if (touchman->check_point(30, 30, gi, name))
+      if (touchman->check_point(130, 130, gi, name))
       {
             printf("point ok, group %d, name: %s\n",gi,name.c_str());
       }
