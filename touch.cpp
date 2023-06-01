@@ -45,10 +45,10 @@ bool touchscreen::pop(touches_coords & t)
 void touchscreen::t_func()
 {
       // this is calibrate coefficients from my ADS7846 Touchscreen
-      const float kminx = 254.9156485,
-            kminy = 176.2642045,
-            kx = 7.800794173,
-            ky = 11.72346591;
+      const float kminx = 254.9156485f,
+            kminy = 176.2642045f,
+            kx = 7.800794173f,
+            ky = 11.72346591f;
 
 
 
@@ -98,8 +98,8 @@ void touchscreen::t_func()
                                     median_val.x /= sample_cnt;
                                     median_val.y /= sample_cnt;
                                     median_val.p /= sample_cnt;
-                                    adjusted_val.x = (median_val.x - kminx) / kx;
-                                    adjusted_val.y = (median_val.y - kminy) / ky;
+                                    adjusted_val.x = (int)(((float)median_val.x - kminx) / kx);
+                                    adjusted_val.y = (int)(((float)median_val.y - kminy) / ky);
 
                                     m.lock();
                                     //printf("Touch Finished\n");
@@ -150,6 +150,13 @@ touchscreen::~touchscreen()
             t->join();
             delete t;
       }
+}
+void touchscreen::simulate_click(int32 x, int32 y) {
+      touches_c median_val = { 0,0,0 },
+            adjusted_val = { x,y,255 };
+      m.lock();
+      touches.push_back({ median_val,adjusted_val });
+      m.unlock();
 }
 int touchscreen::get_details(int w, int h)
 {
@@ -203,8 +210,8 @@ int touchscreen::get_details(int w, int h)
 /////////////////////////////////////
 /////////////////////////////////////
 
-typedef std::vector<int>::iterator IntIter;
-typedef std::pair<int, std::vector <touch_coords>> ddd;
+//typedef std::vector<int>::iterator IntIter;
+//typedef std::pair<int, std::vector <touch_coords>> ddd;
 
 touch_manager::touch_manager() {
 }
@@ -215,41 +222,49 @@ touch_manager::~touch_manager()
 void touch_manager::sort_by_priority() {
       struct prio_key
       {
-            inline bool operator() (const touch_group_info & struct1, const touch_group_info & struct2)
+            inline bool operator() (const touch_group & struct1, const touch_group & struct2)
             {
-                  return (struct1.second.priority > struct2.second.priority);
+                  return (struct1.priority > struct2.priority);
             }
       };
       std::sort(groups.begin(), groups.end(), prio_key());
 
 }
 
-int touch_manager::check_exists(int group_index) {
-      for (touch_group_info tgi : groups)
-            if (tgi.first == group_index)
-                  return 1;
+touch_group * touch_manager::get_group(int group_id) {
+      for (size_t n = 0; n < groups.size(); n++)
+            //for (touch_group group : groups)
+            if (groups[n].id == group_id)
+                  //if (group.id == group_id)
+                  return &groups[n];
+      return nullptr;
+}
+int32 touch_manager::set_group_active(int32 group_id, int32 active) {
+      touch_group * group = get_group(group_id);
+      if (group == nullptr) return 1;
+      group->active = active;
       return 0;
 }
-int touch_manager::set_group_active(int32 group_index, int32 active) {
-      if (!check_exists(group_index)) return 1;
-      groups[group_index].second.active = active;
-      return 0;
+void touch_manager::touch_manager::set_groups_active(int32 active) {
+      for (size_t n = 0; n < groups.size(); n++)
+            groups[n].active = active;
 }
-int touch_manager::add_group(int32 group_index, int32 priority, int32 active) {
-      if (check_exists(group_index)) return 1;
-      groups.push_back({ group_index,{priority,active} });
-      areas[group_index] = {};
+int touch_manager::add_group(int32 group_id, int32 priority, int32 active) {
+      if (get_group(group_id) != nullptr) return 1;
+      groups.push_back({ group_id,priority,active });
       sort_by_priority();
       return 0;
 }
-int touch_manager::clear_group(int32 group_index) {
-      if (!check_exists(group_index)) return 1;
-      areas[group_index].clear();
+int touch_manager::clear_group(int32 group_id) {
+      touch_group * group = get_group(group_id);
+      if (group == nullptr) return 1;
+      group->areas.clear();
       return 0;
 }
-int touch_manager::add_rect(int32 group_index, std::string shapename, IntRect rct)
+int touch_manager::add_rect(int32 group_id, std::string shapename, IntRect rct)
 {
-      if (!check_exists(group_index)) return 1;
+      touch_group * group = get_group(group_id);
+      if (group == nullptr) return 1;
       touch_coords figure;
       figure.type = TOUCH_TYPE_RECT;
       figure.coords[0] = rct.left();
@@ -257,28 +272,29 @@ int touch_manager::add_rect(int32 group_index, std::string shapename, IntRect rc
       figure.coords[2] = rct.right();
       figure.coords[3] = rct.top();
       figure.name = shapename;
-      areas[group_index].push_back(figure);
+      group->areas.push_back(figure);
       return 0;
 }
-int touch_manager::add_point(int32 group_index, std::string shapename, IntCircle circle) {
-      if (!check_exists(group_index)) return 1;
+int touch_manager::add_point(int32 group_id, std::string shapename, IntCircle circle) {
+      touch_group * group = get_group(group_id);
+      if (group == nullptr) return 1;
       touch_coords figure;
       figure.type = TOUCH_TYPE_CIRCLE;
       figure.coords[0] = circle.x;
       figure.coords[1] = circle.y;
       figure.coords[2] = circle.r;
       figure.name = shapename;
-      areas[group_index].push_back(figure);
+      group->areas.push_back(figure);
       return 0;
 }
 void touch_manager::dump()
 {
       printf("touch_manager::dump()\n-----------------------------------\n");
-      for (touch_group_info tgi : groups)
+      for (const touch_group group : groups)
       {
             printf("Group #%d (prio: %d, active: %d, count: %d)\n",
-                   tgi.first, tgi.second.priority, tgi.second.active, areas[tgi.first].size());
-            for (touch_coords tmp : areas[tgi.first])
+                   group.id, group.priority, group.active, group.areas.size());
+            for (touch_coords tmp : group.areas)
                   switch (tmp.type) {
                         case TOUCH_TYPE_RECT: {
                               printf("\t%s:rect %d,%d,%d,%d\n", tmp.name.c_str(), tmp.coords[0], tmp.coords[1], tmp.coords[2], tmp.coords[3]); break;
@@ -292,12 +308,12 @@ void touch_manager::dump()
                   }
       }
 }
-int touch_manager::check_point(const int32 x, const int32 y, int32 & group_index, std::string & shapename) {
-      for (touch_group_info tgi : groups) // iterate groups
-            if (tgi.second.active)
-                  for (touch_coords tmp : areas[tgi.first]) {
+int touch_manager::check_point(const int32 x, const int32 y, int32 & group_id, std::string & shapename) {
+      for (const touch_group group : groups)
+            if (group.active)
+                  for (touch_coords tmp : group.areas) {
                         if (tmp.check_pt(x, y)) {
-                              group_index = tgi.first;
+                              group_id = group.id;
                               shapename = tmp.name;
                               return 1;
                         }
@@ -308,34 +324,24 @@ int touch_manager::check_point(const int32 x, const int32 y, int32 & group_index
 #ifndef NDEBUG
 void touch_manager::debug(video_driver * scr) {
 
-      // printf("touch_manager::dump()\n-----------------------------------\n");
       ARGB clr;
-      for (touch_group_info tgi : groups)
+      for (const touch_group group : groups)
       {
-            clr = tgi.second.active ? 0xFF0000 : 0xA0FF0000;
-            //printf("Group #%d (prio: %d, active: %d, count: %d)\n",                   tgi.first, tgi.second.priority, tgi.second.active, areas[tgi.first].size());
-            for (touch_coords tmp : areas[tgi.first])
+            clr = group.active ? 0xFF0000 : 0x00FF00;
+            for (touch_coords tmp : group.areas)
             {
                   switch (tmp.type) {
                         case TOUCH_TYPE_RECT: {
                               scr->rectangle({ tmp.coords[0], tmp.coords[1], tmp.coords[2], tmp.coords[3] }, clr);
                               break;
-                              //                          printf("\t%s:rect %d,%d,%d,%d\n", tmp.name.c_str(), tmp.coords[0], tmp.coords[1], tmp.coords[2], tmp.coords[3]); break;
                         }
                         case TOUCH_TYPE_CIRCLE: {
                               scr->circle({ tmp.coords[0], tmp.coords[1], tmp.coords[2] }, clr, clNone);
                               break;
-                              //                           printf("\t%s:circle %d,%d,%d\n", tmp.name.c_str(), tmp.coords[0], tmp.coords[1], tmp.coords[2]); break;
-                        }
-                        default: {
-                              //printf("\tUnknown type: %d\n", tmp.type); break;
-                              break;
                         }
                   }
-                  //                  scr->flip();
             }
       }
-
 }
-#endif // !1
+#endif // NDEBUG
 

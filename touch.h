@@ -18,7 +18,7 @@
 #define TOUCH_GROUP_ZOOM 0
 #define TOUCH_GROUP_SHIPSHAPE 1
 #define TOUCH_GROUP_SHIPLIST 2
-#define TOUCH_GROUP_INFO 3
+#define TOUCH_GROUP_INFOLINE 3
 #define TOUCH_GROUP_INFOWINDOW 4
 
 #define TOUCH_TYPE_RECT 0
@@ -58,6 +58,7 @@ public:
       // const char * get_name() { return devname; }
       touchscreen(const char * devname, int32 w, int32 h);
       ~touchscreen();
+      void simulate_click(int32 x, int32 y);
 };
 
 /////////////////////////////////////
@@ -89,28 +90,30 @@ struct touch_coords
             }
       }
 };
-struct touch_group_params {
-      int32 priority, active;
+struct touch_group {
+      int32 id,priority, active;
+      std::vector <touch_coords> areas;
 };
-typedef int32 touch_group_id;
-typedef std::pair<touch_group_id, touch_group_params> touch_group_info;
+//typedef int32 touch_group_id;
+//typedef std::pair<touch_group_id, touch_group_params> touch_group_info;
 class touch_manager
 {
 private:
-      std::vector <touch_group_info> groups;
-      std::unordered_map<int, std::vector <touch_coords>> areas;
-      int check_exists(int group_index);
+      std::vector <touch_group> groups;
+      //std::unordered_map<int, std::vector <touch_coords>> areas;
+      touch_group * get_group(int group_index);
       void sort_by_priority();
 public:
       touch_manager();
       ~touch_manager();
-      int set_group_active(int32 group_index, int32 active);
-      int add_group(int32 group_index, int32 priority, int32 active = 1);
-      int clear_group(int32 group_index);
-      int add_rect(int32 group_index, std::string shapename, IntRect rct);
-      int add_point(int32 group_index, std::string shapename, IntCircle circle);
+      int set_group_active(int32 group_id, int32 active);
+      void set_groups_active(int32 active);
+      int add_group(int32 group_id, int32 priority, int32 active = 1);
+      int clear_group(int32 group_id);
+      int add_rect(int32 group_id, std::string shapename, IntRect rct);
+      int add_point(int32 group_id, std::string shapename, IntCircle circle);
       void dump();
-      int check_point(const int32 x, const int32 y, int32 & group_index, std::string & shapename);
+      int check_point(const int32 x, const int32 y, int32 & group_id, std::string & shapename);
       //int check_point(const int32 x, const int32 y, int32 & group_index, int32 & area_index);
 #ifndef NDEBUG
       void debug(video_driver * screen);

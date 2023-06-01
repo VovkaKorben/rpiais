@@ -16,28 +16,32 @@ struct char_info_s
 {
       int32 width_start, width_end, real_width_start, real_width_end;
       puint32 data;
-      int32 width() {  return width_end - width_start + 1;      }
+      int32 width() { return width_end - width_start + 1; }
       int32 real_width() { return real_width_end - real_width_start + 1; }
-      
+
 };
 class font {
 private:
-      int32 height_start, real_height_start, height_end, real_height_end,interval;
+      int32 height_start, real_height_start, height_end, real_height_end, interval;
       puint32 pixdata = nullptr;
       std::vector <char_info_s> char_info;
 public:
-      int32 height() { return height_end-height_start; };
-      int32 real_height() { return real_height_end- real_height_start+1; };
+      int32 height() { return height_end - height_start; };
+      int32 real_height() { return real_height_end - real_height_start + 1; };
       int32 height_start_delta() { return height_start - real_height_start; }
       int32 get_interval() { return interval; }
-     // uint32 offset() { return ofs; };
+      void set_interval(int32 font_interval)
+      {
+            interval = font_interval;
+      }
+      // uint32 offset() { return ofs; };
       char_info_s * get_char_info(char c)
       {
 
-            c -= 32;
-            if (c >= char_info.size())
+            size_t v = c - 32;
+            if (v >= char_info.size())
                   return nullptr;
-            return &char_info[c];
+            return &char_info[v];
 
       }
       font() {};
@@ -49,7 +53,7 @@ public:
 
 class image {
 private:
-      uint32 data_size,w,h;
+      uint32 data_size, w, h;
       puint8 data;
       bool loaded;
 public:

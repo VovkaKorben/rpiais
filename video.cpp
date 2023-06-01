@@ -632,6 +632,18 @@ bool video_driver::load_font(const int index, const std::string filename)
 
       return true;
 }
+int32 video_driver::get_font_height(const int font_index)
+{
+      if (fonts.count(font_index) == 0)
+            return -1;
+      return fonts[font_index].height();
+}
+int32 video_driver::set_font_interval(const int32 font_index, const int32 font_interval) {
+      if (fonts.count(font_index) == 0)
+            return 1;
+      fonts[font_index].set_interval(font_interval);
+      return 0;
+}
 void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap, bool dbg)
 //void video_driver::draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags)
 {
@@ -659,16 +671,15 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
             y += fonts[font_index].height() / 2 + fonts[font_index].height_start_delta();
       else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)
             y += fonts[font_index].height() + fonts[font_index].height_start_delta();// +fonts[font_index].offset();
-      /*else   if ((flags & VALIGN_TOP) == VALIGN_TOP)
-            y += fonts[font_index].height_start_delta();// +fonts[font_index].offset();
-      y += fonts[font_index].height_start_delta();
-      */
 
+      // precalc alpha for replaces
+      uint32 black_swap_alpha = (black_swap >> 24) ^ 0xFF,
+            white_swap_alpha = (white_swap >> 24) ^ 0xFF;
 
 
       int32 scanline_current, y_cnt, x_cnt, x_pos;
       puint32 data;
-      uint32 font_pix, clr;
+      uint32 font_pix, clr, tmp_alpha;
       //ARGB temp_color, paste_color = color & 0xFFFFFF;
       for (char & c : s) {
 
@@ -694,26 +705,30 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
 
                               if ((clr == 0x000000) && (black_swap != clNone))
                               {
-                                    font_pix = 0x000000;
+                                    /*
+                                    uint32 aswap = (black_swap >> 24) ^ 0xFF;
+                                    uint32 afont = (*data >> 24) ^ 0xFF;
+                                    uint32 ca = aswap * afont;
+                                    ca = ca ^ 0x0000FF00;
+                                    ca = ca << 16;
+                                    ca = ca & 0xFF000000;
+                                    font_pix = ca | (black_swap & 0xFFFFFF);
+                                    */
+                                    tmp_alpha = ((font_pix >> 24) ^ 0xFF) * black_swap_alpha;
+                                    font_pix = (((tmp_alpha ^ 0x0000FF00) << 16) & 0xFF000000) | (black_swap & 0xFFFFFF);
+
                               }
                               else if ((clr == 0xFFFFFF) && (white_swap != clNone))
                               {
 
-                                    float aswap = ((white_swap >> 24) ^ 0xFF) / 255.0;
+                                  /*  float aswap = ((white_swap >> 24) ^ 0xFF) / 255.0;
                                     float afont = (*data >> 24) / 255.0;
                                     float aresult = aswap * afont;
                                     uint32 ares = aresult * 255;
-                                    //ares = ares ^ 0xFF;
                                     ares = ares << 24;
-                                    //uint32 ares = ((uint8)(aresult * 255)) ^ 0xFF;
-                                    font_pix = ares | (white_swap & 0xFFFFFF);
-                                    /*uint32 font_alpha = (font_pix >> 24) ^ 255;
-                                    uint32 malpha = replace_alpha * font_alpha;
-                                    malpha = malpha >> 8;
-                                    malpha = malpha ^ 255;
-                                    a = (((white_swap >> 24) * (font_pix >> 24)) & 0x0000FF00) << 16;
-                                    */
-                                    //font_pix = a | (white_swap & 0xFFFFFF);
+                                    font_pix = ares | (white_swap & 0xFFFFFF);*/
+                                    tmp_alpha = ((font_pix >> 24) ^ 0xFF) * white_swap_alpha;
+                                    font_pix = (((tmp_alpha ^ 0x0000FF00) << 16) & 0xFF000000) | (white_swap & 0xFFFFFF);
                               }
 
 

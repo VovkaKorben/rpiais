@@ -517,11 +517,22 @@ void draw_vessels_info() {
 
 void draw_infowindow()
 {
-      if (show_info_window != 0)
-      {
-            // draw window
-            screen->fill_rect(WINDOW_RECT, 0x20000000);
-            screen->rectangle(WINDOW_RECT, clBlack);
+      if (!show_info_window)
+            return;
+      // draw window
+      //const int32 lh = 12;
+      screen->fill_rect(WINDOW_RECT, clWhite | clTransparency25);
+      screen->rectangle(WINDOW_RECT, clBlack);
+      int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
+      if (show_info_window < 0)
+      {// global info (sattelites etc)
+            screen->draw_text(FONT_LARGE, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10+screen->get_font_height(FONT_LARGE);
+            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4+screen->get_font_height(FONT_NORMAL);
+            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4+screen->get_font_height(FONT_NORMAL);
+            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4+screen->get_font_height(FONT_NORMAL);
+      }
+      else
+      { // ship info
       }
 
 }
@@ -571,14 +582,14 @@ void draw_frame()
 
 ////////////////////////////////////////////////////////////
 void process_touches() {
-      touchman->debug(screen);
+
       std::string name;
       int32 gi;
       touches_coords t;
       //touchman->check_point(30, 300, gi, name);
       while (touchscr->pop(t))
       {
-            printf("Touch: %d,%d ", t.adjusted.x, t.adjusted.y);
+            printf("-- Touch: %d,%d --\n\n", t.adjusted.x, t.adjusted.y);
 
             if (touchman->check_point(t.adjusted.x, t.adjusted.y, gi, name))
             {
@@ -587,6 +598,7 @@ void process_touches() {
                         case TOUCH_GROUP_ZOOM: {
                               if (!name.compare("zoomin"))
                               {
+
                                     zoom_changed(zoom_index - 1);
                               }
                               else if (!name.compare("zoomout"))
@@ -596,14 +608,23 @@ void process_touches() {
 
                               break;
                         }
-                        case TOUCH_GROUP_INFO:
-                        {
-                              show_info_window = 1; // show environment
+                        case TOUCH_GROUP_INFOLINE:
+                        { // show info window
+                              show_info_window = -1;
+
+                              // deactivate all touch groups,except window group
+                              touchman->set_groups_active(0);
+                              if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 1))
+                                    printf("[TOUCH] error set active %d to group %d", 1, TOUCH_GROUP_INFOWINDOW);
                               break;
                         }
                         case TOUCH_GROUP_INFOWINDOW:
-                        {
-                              show_info_window = 0; // hide info window
+                        { // hide info window
+                              show_info_window = 0;
+                              // enable all touch groups, disable window group
+                              touchman->set_groups_active(1);
+                              if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 0))
+                                    printf("[TOUCH] error set active %d to group %d", 0, TOUCH_GROUP_INFOWINDOW);
                               break;
                         }
                         default:
@@ -614,6 +635,7 @@ void process_touches() {
                   }
 
                   //printf("(group %d, name: %s)\n", gi, name.c_str());
+                  touchman->dump();
             }
             else
                   printf("(not found)\n");
@@ -646,7 +668,9 @@ void video_loop_start() {
 
             last_msg_id = update_nmea(last_msg_id);
             draw_frame();
+
             process_touches();
+            touchman->debug(screen);
 
 
             frames++;
@@ -709,8 +733,16 @@ void init_video() {
             printf("video_init error: %d.\n", screen->get_last_error());
             return;
       }
+      screen->load_font(FONT_LARGE, data_path("/img/large.png"));
+      screen->set_font_interval(FONT_LARGE, 2);
+
+      //screen->fill_rect(SCREEN_RECT, clLtGray);
+      //screen->draw_text(FONT_LARGE, 100, 100, "XYZ", VALIGN_TOP | HALIGN_LEFT, clRed | clTransparency50, clNone);
+
       screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
       screen->load_font(FONT_NORMAL, data_path("/img/normal.png"));
+      
+      
       img_minus = new image(data_path("/img/minus.png"));
       img_plus = new image(data_path("/img/plus.png"));
       min_fit = imin(
@@ -732,8 +764,8 @@ void init_touch() {
       touchman->add_group(TOUCH_GROUP_SHIPLIST, 12);
       //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
 
-      touchman->add_group(TOUCH_GROUP_INFO, 10);
-      touchman->add_rect(TOUCH_GROUP_INFO, "info", { 0,0,480,40 });
+      touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
+      touchman->add_rect(TOUCH_GROUP_INFOLINE, "info", { 0,0,480,40 });
 
       touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
       touchman->add_rect(TOUCH_GROUP_INFOWINDOW, "window", WINDOW_RECT);
@@ -763,6 +795,7 @@ int main()
 #else
             std::cout << "Map draw disabled (#define map_show 0)" << std::endl;
 #endif
+            touchscr->simulate_click(20, 20);
             video_loop_start();
             return 0;
       }

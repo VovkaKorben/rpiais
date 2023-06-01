@@ -15,6 +15,9 @@ const ARGB clNone = 0xFFFFFFFF;
 const ARGB clLtGray = 0xC0C0C0;
 const ARGB clGray = 0x808080;
 const ARGB clRed = 0xFF0000;
+const ARGB clTransparency25 = 0x40000000;
+const ARGB clTransparency50 = 0x80000000;
+const ARGB clTransparency75 = 0xC0000000;
 
 extern IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
 extern int32 CENTER_X, CENTER_Y;
@@ -25,6 +28,7 @@ extern int32 CENTER_X, CENTER_Y;
 
 #define FONT_OUTLINE 0
 #define FONT_NORMAL 1
+#define FONT_LARGE 2
 #define max_vertices 500
 
 
@@ -72,7 +76,7 @@ private:
             current_fb, buffer_count,
             pixel_count, // = width * height
             screen_size, // = pixel_count * byte_per_pix, 
-            _width,_height;
+            _width, _height;
       std::map <int, font> fonts;
       fb_var_screeninfo vinfo;
       PIX_PTR pix_buf, fb_start;
@@ -96,6 +100,8 @@ public:
       int width() { return _width; };
       int height() { return _height; };
       bool load_font(const int index, const std::string filename);
+      int32 get_font_height(const int32 font_index);
+      int32 set_font_interval(const int32 font_index, const int32 font_interval );
       void fill_rect(int x0, int y0, int x1, int y1, const ARGB color);
       void fill_rect(IntRect rct, const ARGB color);
       void rectangle(IntRect rct, const ARGB color);

@@ -1,5 +1,7 @@
 - take a look for long ship names in info_box
 - optimize drawmap->drawpoly->draw_outline, to not draw hidden ribs
 - add in-font icon for pos and satellites
-- touch driver - two types of points = rect and circle
-- touch driver - add pressure param
++ touch driver - two types of points = rect and circle
++ touch driver - add pressure param
+- add large font for info window
+- update video_driver::draw_text -> for black pixels
