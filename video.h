@@ -20,6 +20,7 @@ const ARGB clTransparency50 = 0x80000000;
 const ARGB clTransparency75 = 0xC0000000;
 
 extern IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
+extern IntPoint CENTER;
 extern int32 CENTER_X, CENTER_Y;
 
 
@@ -28,7 +29,8 @@ extern int32 CENTER_X, CENTER_Y;
 
 #define FONT_OUTLINE 0
 #define FONT_NORMAL 1
-#define FONT_LARGE 2
+//#define FONT_LARGE 2
+#define FONT_MONOMEDIUM 3
 #define max_vertices 500
 
 
@@ -89,10 +91,13 @@ private:
       void edge_remove_byY(bucketset * b, int scanline_no);
       void calc_fill(const poly * sh);
       void draw_fill(const ARGB color);
-      void draw_outline(const poly * sh, const ARGB color);
+      //void draw_outline(const poly * sh, const ARGB color);
+     
       void draw_line_fast(int y, int xs, int xe, const ARGB color);
       void draw_polyline(int x, int y, const ARGB color, int close_polyline = 0);
 public:
+      void draw_line_v2(const IntPoint pt1, const IntPoint pt2, const ARGB color);
+      void draw_outline_v2(const poly * sh, const ARGB color);
       void flip();
       video_driver(const char * devname, int _buffer_count = 1);
       ~video_driver();
@@ -105,7 +110,7 @@ public:
       void fill_rect(int x0, int y0, int x1, int y1, const ARGB color);
       void fill_rect(IntRect rct, const ARGB color);
       void rectangle(IntRect rct, const ARGB color);
-      void draw_line(int x1, int y1, int x2, int y2, const ARGB color);
+      //void draw_line(int x1, int y1, int x2, int y2, const ARGB color);
       void draw_pix(const int x, const int y, const ARGB color);
       void draw_shape(const poly * sh, const ARGB fill_color, const ARGB outline_color);
       //void draw_text(int font_index, int x, int y, std::string s, int flags);

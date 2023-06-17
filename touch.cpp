@@ -207,11 +207,6 @@ int touchscreen::get_details(int w, int h)
 }
 
 /////////////////////////////////////
-/////////////////////////////////////
-/////////////////////////////////////
-
-//typedef std::vector<int>::iterator IntIter;
-//typedef std::pair<int, std::vector <touch_coords>> ddd;
 
 touch_manager::touch_manager() {
 }

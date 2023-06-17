@@ -1,7 +1,10 @@
 - take a look for long ship names in info_box
-- optimize drawmap->drawpoly->draw_outline, to not draw hidden ribs
++ optimize drawmap->drawpoly->draw_outline, to not draw hidden ribs
 - add in-font icon for pos and satellites
 + touch driver - two types of points = rect and circle
 + touch driver - add pressure param
-- add large font for info window
-- update video_driver::draw_text -> for black pixels
++ add large font for info window
++ update video_driver::draw_text -> for black pixels
+- check OSM maps for extract inland water ways
++ make font for infoline with monospaced numbers ==>> https://github.com/Tecate/bitmap-fonts, https://www.dafont.com/bitmap.php
+- calculate heading from 2 last GPS positions

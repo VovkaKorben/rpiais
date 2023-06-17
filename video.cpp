@@ -30,9 +30,12 @@
 #define FB_BUFFER_COUNT_ERROR 8;
 
 
-int CENTER_X, CENTER_Y;
+int32 CENTER_X, CENTER_Y;
+IntPoint CENTER;
 
 IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
+////////////////////////////////////////////////////////////
+  
 
 ////////////////////////////////////////////////////////////
 void video_driver::flip()
@@ -55,15 +58,25 @@ void video_driver::flip()
 
 
 
-video_driver::video_driver(const char * devname, int _buffer_count)
+video_driver::video_driver(const char* devname, int _buffer_count)
 {
+
+
       // open device
       struct fb_fix_screeninfo finfo;
       fbdev = open(devname, O_RDWR);
-      if (!fbdev) { last_error = FB_OPEN_FAILED; return; }
+      if (fbdev == -1)
+      {
+            perror("open");
+            last_error = FB_OPEN_FAILED;
+            return;
+      }
 
       // get VINFO/FINFO and set buffer count
-      if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) { last_error = FB_GET_VSCREENINFO_FAILED; return; }
+      if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) {
+            last_error = FB_GET_VSCREENINFO_FAILED;
+            return;
+      }
 
       // setup screen numbers
       _width = vinfo.xres,
@@ -97,7 +110,7 @@ video_driver::video_driver(const char * devname, int _buffer_count)
 
 
       // map fb memory
-      fb_start = (PIX_PTR)mmap(NULL, screen_size * _buffer_count, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);// map framebuffer to user memory 
+      fb_start = (PIX_PTR)mmap(NULL, screen_size * _buffer_count, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);
       if ((intptr_t)fb_start == -1) { last_error = FB_MMAP_FAILED; return; }
 
       if (buffer_count)
@@ -115,6 +128,8 @@ video_driver::video_driver(const char * devname, int _buffer_count)
       // creating rects
       CENTER_X = _width / 3,
             CENTER_Y = _height / 2;
+      CENTER.x = CENTER_X;
+      CENTER.y = CENTER_Y;
       VIEWBOX_RECT = IntRect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
       SCREEN_RECT = IntRect{ 0, 0, _width - 1, _height - 1 };
       SHIPLIST_RECT = IntRect{ CENTER_X * 2, 0,_width - 1, _height - 1 };
@@ -190,7 +205,7 @@ void video_driver::fill_rect(int x0, int y0, int x1, int y1, const ARGB color) {
 void video_driver::fill_rect(IntRect rct, const ARGB color) {
       fill_rect(rct.left(), rct.bottom(), rct.right(), rct.top(), color);
 }
-void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
+/*void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
       int w = x1 - x0;
       int h = y1 - y0;
       int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
@@ -220,7 +235,7 @@ void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
                   y0 += dy2;
             }
       }
-}
+}*/
 void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 { //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
@@ -238,26 +253,26 @@ void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 
 
 }
-void video_driver::draw_polyline(int x, int y, const ARGB color, int close_polyline)
+/*
+void video_driver::draw_polyline(int32 x, int32 y, const ARGB color, int close_polyline)
 {
-      static int count = 0;
-      static int first_x, first_y;
-      static int prev_x, prev_y;
+      static int32 count = 0;
+      static int32 first_x, first_y;
+      static int32 prev_x, prev_y;
 
       if (close_polyline != 0 && count > 1)
-      {
+      { // close polyline
             draw_line(prev_x, prev_y, first_x, first_y, color);
             count = 0;
       }
       else
-
+      {
             if (count == 0)
-            {
+            { // init polyline
                   first_x = x;
                   first_y = y;
                   prev_x = x;
                   prev_y = y;
-                  count++;
             }
             else
                   if (prev_x != x || prev_y != y)
@@ -266,10 +281,11 @@ void video_driver::draw_polyline(int x, int y, const ARGB color, int close_polyl
                         draw_line(prev_x, prev_y, x, y, color);
                         prev_x = x;
                         prev_y = y;
-                        count++;
                   }
-}
-void video_driver::draw_image(image * img, int x, int y, int flags, int transparency)
+            count++;
+      }
+}*/
+void video_driver::draw_image(image* img, int x, int y, int flags, int transparency)
 {
       if (!img->is_loaded()) return;
       if (transparency == 0) return; // nothing draw with zero transparency
@@ -383,7 +399,7 @@ void video_driver::circle(const IntCircle circle, const ARGB outline, const ARGB
 }
 
 ////////////////////////////////////////////////////////////
-void _insertionSort(bucketset * b) {
+void _insertionSort(bucketset* b) {
       double _fx, _s;
       int j, _y, _ix;
       for (int i = 1; i < b->cnt; i++)
@@ -413,7 +429,7 @@ void video_driver::edge_tables_reset()
       for (int i = 0; i < _height; i++)
             et[i].cnt = 0;
 }
-void video_driver::edge_store_tuple_float(bucketset * b, int y_end, double  x_start, double  slope)
+void video_driver::edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope)
 {
       b->barr[b->cnt].y = y_end;
       b->barr[b->cnt].fx = x_start;
@@ -422,7 +438,7 @@ void video_driver::edge_store_tuple_float(bucketset * b, int y_end, double  x_st
       //	_insertionSort(b);
 
 }
-void video_driver::edge_store_tuple_int(bucketset * b, int y_end, double  x_start, double  slope)
+void video_driver::edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope)
 {
       //if (dbg_flag)		cout << string_format("+ Added\ty: %d\tx: %.3f\ts: %.3f\n", y_end, x_start, slope);
       b->barr[b->cnt].y = y_end;
@@ -487,14 +503,14 @@ void video_driver::edge_store_table(IntPoint pt1, IntPoint pt2) {
 
 
 }
-void video_driver::edge_update_slope(bucketset * b) {
+void video_driver::edge_update_slope(bucketset* b) {
       for (int i = 0; i < b->cnt; i++)
       {
             b->barr[i].fx += b->barr[i].slope;
             b->barr[i].ix = int(round(b->barr[i].fx));
       }
 }
-void video_driver::edge_remove_byY(bucketset * b, int scanline_no)
+void video_driver::edge_remove_byY(bucketset* b, int scanline_no)
 {
       int i = 0, j;
       while (i < b->cnt)
@@ -518,7 +534,7 @@ void video_driver::edge_remove_byY(bucketset * b, int scanline_no)
       }
 }
 ////////////////////////////////////////////////////////////
-void video_driver::calc_fill(const poly * sh) {
+void video_driver::calc_fill(const poly* sh) {
 
       IntPoint prev_point, point;
       int path_end, point_id = 0;
@@ -582,13 +598,10 @@ void video_driver::draw_fill(const ARGB color)
       }
 
 }
-void video_driver::draw_outline(const poly * sh, const ARGB color)
+/*void video_driver::draw_outline(const poly * sh, const ARGB color)
 {
-
-
-      IntPoint //* prev_point,
-            * point;
-      int path_end, point_id = 0;
+      IntPoint * point;
+      int32 path_end, point_id = 0;
       for (int path_id = 0; path_id < sh->path_count; path_id++)
       {
             path_end = sh->pathindex[path_id + 1];
@@ -606,9 +619,131 @@ void video_driver::draw_outline(const poly * sh, const ARGB color)
             draw_polyline(0, 0, color, 1); // close poly
 
       }
+}*/
+typedef int OutCode;
+
+const int INSIDE = 0; // 0000
+const int LEFT = 1;   // 0001
+const int RIGHT = 2;  // 0010
+const int BOTTOM = 4; // 0100
+const int TOP = 8;    // 1000
+OutCode ComputeOutCode(int32 x, int32 y)
+{
+      OutCode code = INSIDE;  // initialised as being inside of clip window
+
+      if (x < SCREEN_RECT.left())           // to the left of clip window
+            code |= LEFT;
+      else if (x > SCREEN_RECT.right())      // to the right of clip window
+            code |= RIGHT;
+      if (y < SCREEN_RECT.bottom())           // below the clip window
+            code |= BOTTOM;
+      else if (y > SCREEN_RECT.top())      // above the clip window
+            code |= TOP;
+
+      return code;
+}
+bool CohenSutherlandLineClip(int32& x0, int32& y0, int32& x1, int32& y1)
+{
+      OutCode outcode0 = ComputeOutCode(x0, y0);
+      OutCode outcode1 = ComputeOutCode(x1, y1);
+      bool accept = false;
+
+      while (true) {
+            if (!(outcode0 | outcode1)) {
+                  accept = true;
+                  break;
+            }
+            else if (outcode0 & outcode1) {
+                  break;
+            }
+            else {
+                  int32 x, y;
+
+                  // At least one endpoint is outside the clip rectangle; pick it.
+                  OutCode outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
+                  if (outcodeOut & TOP) {           // point is above the clip window
+                        x = x0 + (x1 - x0) * (SCREEN_RECT.top() - y0) / (y1 - y0);
+                        y = SCREEN_RECT.top();
+                  }
+                  else if (outcodeOut & BOTTOM) { // point is below the clip window
+                        x = x0 + (x1 - x0) * (SCREEN_RECT.bottom() - y0) / (y1 - y0);
+                        y = SCREEN_RECT.bottom();
+                  }
+                  else if (outcodeOut & RIGHT) {  // point is to the right of clip window
+                        y = y0 + (y1 - y0) * (SCREEN_RECT.right() - x0) / (x1 - x0);
+                        x = SCREEN_RECT.right();
+                  }
+                  else if (outcodeOut & LEFT) {   // point is to the left of clip window
+                        y = y0 + (y1 - y0) * (SCREEN_RECT.left() - x0) / (x1 - x0);
+                        x = SCREEN_RECT.left();
+                  }
+                  if (outcodeOut == outcode0) {
+                        x0 = x;
+                        y0 = y;
+                        outcode0 = ComputeOutCode(x0, y0);
+                  }
+                  else {
+                        x1 = x;
+                        y1 = y;
+                        outcode1 = ComputeOutCode(x1, y1);
+                  }
+            }
+      }
+      return accept;
 }
 ////////////////////////////////////////////////////////////
-void video_driver::draw_shape(const poly * sh, const ARGB fill_color, const ARGB outline_color)
+void video_driver::draw_line_v2(const IntPoint pt1, const IntPoint pt2, const ARGB color) {
+
+      int32 x1 = pt1.x, y1 = pt1.y;
+      int32 x2 = pt2.x, y2 = pt2.y;
+      if (!CohenSutherlandLineClip(x1, y1, x2, y2))
+            return;
+      int32 w = x2 - x1;
+      int32 h = y2 - y1;
+      int32 dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+      if (w < 0) dx1 = -1; else if (w > 0) dx1 = 1;
+      if (h < 0) dy1 = -1; else if (h > 0) dy1 = 1;
+      if (w < 0) dx2 = -1; else if (w > 0) dx2 = 1;
+      int32 longest = abs(w);
+      int32 shortest = abs(h);
+      if (!(longest > shortest)) {
+            longest = abs(h);
+            shortest = abs(w);
+            if (h < 0) dy2 = -1; else if (h > 0) dy2 = 1;
+            dx2 = 0;
+      }
+      int32 numerator = longest >> 1;
+      for (int32 i = 0; i <= longest; i++) {
+            draw_pix(x1, y1, color);
+            numerator += shortest;
+            if (!(numerator < longest)) { numerator -= longest;                  x1 += dx1;                  y1 += dy1; }
+            else { x1 += dx2;                  y1 += dy2; }
+      }
+}
+void video_driver::draw_outline_v2(const poly* sh, const ARGB color)
+{
+      IntPoint* prev_point, * point;
+      int path_end, point_id = 0;
+      for (int path_id = 0; path_id < sh->path_count; path_id++)
+      {
+            path_end = sh->pathindex[path_id + 1];
+            prev_point = &sh->work[path_end - 1];
+
+            while (point_id < path_end)
+            {
+
+                  point = &sh->work[point_id];
+                  draw_line_v2(*prev_point, *point, color);
+                  prev_point = point;
+                  point_id++;
+            }
+
+            //draw_polyline(0, 0, color, 1); // close poly
+
+      }
+}
+////////////////////////////////////////////////////////////
+void video_driver::draw_shape(const poly* sh, const ARGB fill_color, const ARGB outline_color)
 {
       if (fill_color != clNone)
       {
@@ -619,7 +754,7 @@ void video_driver::draw_shape(const poly * sh, const ARGB fill_color, const ARGB
       }
       if (outline_color != clNone)
       {
-            draw_outline(sh, outline_color);
+            draw_outline_v2(sh, outline_color);
       }
 }
 bool video_driver::load_font(const int index, const std::string filename)
@@ -627,8 +762,8 @@ bool video_driver::load_font(const int index, const std::string filename)
       if (fonts.count(index) != 0)
             return false;
       fonts.emplace(std::piecewise_construct,
-                    std::forward_as_tuple(index),
-                    std::forward_as_tuple(filename));
+            std::forward_as_tuple(index),
+            std::forward_as_tuple(filename));
 
       return true;
 }
@@ -652,8 +787,8 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
 
       // detect text dimensions
       int overall_width = 0, overall_count = 0;
-      char_info_s * ch_info;
-      for (char & c : s) {
+      char_info_s* ch_info;
+      for (char& c : s) {
             ch_info = fonts[font_index].get_char_info(c);
             if (ch_info)
             {
@@ -681,7 +816,7 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
       puint32 data;
       uint32 font_pix, clr, tmp_alpha;
       //ARGB temp_color, paste_color = color & 0xFFFFFF;
-      for (char & c : s) {
+      for (char& c : s) {
 
             if (x >= _width) return; // go away if next char outside screen
 
@@ -721,12 +856,12 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
                               else if ((clr == 0xFFFFFF) && (white_swap != clNone))
                               {
 
-                                  /*  float aswap = ((white_swap >> 24) ^ 0xFF) / 255.0;
-                                    float afont = (*data >> 24) / 255.0;
-                                    float aresult = aswap * afont;
-                                    uint32 ares = aresult * 255;
-                                    ares = ares << 24;
-                                    font_pix = ares | (white_swap & 0xFFFFFF);*/
+                                    /*  float aswap = ((white_swap >> 24) ^ 0xFF) / 255.0;
+                                      float afont = (*data >> 24) / 255.0;
+                                      float aresult = aswap * afont;
+                                      uint32 ares = aresult * 255;
+                                      ares = ares << 24;
+                                      font_pix = ares | (white_swap & 0xFFFFFF);*/
                                     tmp_alpha = ((font_pix >> 24) ^ 0xFF) * white_swap_alpha;
                                     font_pix = (((tmp_alpha ^ 0x0000FF00) << 16) & 0xFF000000) | (white_swap & 0xFFFFFF);
                               }

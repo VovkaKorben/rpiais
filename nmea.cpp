@@ -462,7 +462,10 @@ int _vdm(StringArrayBulk * data)
 
       return 0;
 }
-
+int _vdo(StringArrayBulk * data)
+{
+      return _vdm(data);
+}
 std::map<std::string, nmea_talker> talkers;
 std::map<std::string, nmea_sentence> sentences;
 std::map<std::string, FnPtr> lut = {
@@ -471,6 +474,7 @@ std::map<std::string, FnPtr> lut = {
       {"RMC",_rmc},
       {"GSV",_gsv},
       {"VDM",_vdm},
+       {"VDO",_vdo},
       {"GLL",_gll},
 };
 
@@ -492,10 +496,10 @@ unsigned int parse_nmea(std::string nmea_str)
             return (r | NMEA_NO_CHECKSUM);
 
       // calc checksum
-      unsigned char cs = 0;
+      uint8 cs = 0;
       size_t pos = 1;
       while (pos < asterisk_pos)
-            cs ^= nmea_str[pos++];
+            cs ^= (uint8)nmea_str[pos++];
       std::string calculated_cs = string_format("%.2X", cs),
             origin_cs = nmea_str.substr(asterisk_pos + 1, 2);
       if (calculated_cs != origin_cs)
@@ -731,7 +735,7 @@ StringArray bitcollector::create_vdm(int & group_id)
             // calc checksum
             cs = 0;
             for (char c : r[current_msg])
-                  cs ^= c;
+                  cs ^= (uint8)c;
             r[current_msg] = string_format("!%s*%.2X", r[current_msg].c_str(), cs);
 
       }

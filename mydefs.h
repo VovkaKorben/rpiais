@@ -24,20 +24,23 @@
 #define TO_RAD(x) (x)*PI180
 
 typedef signed char int8;
-typedef int8 * pint8;
+typedef int8* pint8;
 typedef unsigned char uint8;
-typedef uint8 * puint8;
-typedef char * pchar;
+typedef uint8* puint8;
+typedef char* pchar;
 
 typedef signed int int32;
 typedef unsigned int uint32;
-typedef unsigned int * puint32;
-typedef signed int * pint32;
+typedef unsigned int* puint32;
+typedef signed int* pint32;
 
 typedef unsigned short uint16;
-typedef unsigned short * puint16;
+typedef unsigned short* puint16;
 typedef signed short int16;
-typedef signed short * pint16;
+typedef signed short* pint16;
+
+typedef signed long long int64;
+typedef unsigned long long uint64;
 
 typedef unsigned int ARGB;
 
@@ -138,28 +141,27 @@ inline std::string dec2bin(uint32 v, int len = 0)
 }
 
 
-inline uint64_t utc_ms() {
+inline uint64 utc_ms() {
       struct timespec t;
       clock_gettime(CLOCK_REALTIME, &t);
       return t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 
 
-inline bool file_exists(const std::string & name) {
+inline bool file_exists(const std::string& name) {
       struct stat buffer;
       return (stat(name.c_str(), &buffer) == 0);
 }
-
-
+//struct  FloatPoint;
 struct  IntPoint
 {
-      int x, y;
+      int32 x, y;
       void offset_add(IntPoint t)
       {
             x += t.x;
             y += t.y;
       }
-      void offset_add(int _x, int _y)
+      void offset_add(int32 _x, int32 _y)
       {
             x += _x;
             y += _y;
@@ -169,6 +171,18 @@ struct  IntPoint
             x -= t.x;
             y -= t.y;
       }
+      IntPoint offset(int32 _x, int32 _y)
+      {
+            IntPoint r;
+            r.x = x + _x;
+            r.y = y + _y;
+            return r;
+      }
+      bool is_equal(IntPoint t)
+      {
+            return (t.x == x && t.y == y);
+      }
+
 };
 struct  FloatPoint
 {
@@ -267,7 +281,11 @@ public:
       void set_right(int v) { x2 = v; }
       void set_bottom(int v) { y1 = v; }
       void set_top(int v) { y2 = v; }
-
+      IntPoint center()
+      {
+            return { 0,0 };
+            //            IntPoint r;
+      }
       IntRect() {};
       IntRect(int l, int b, int r, int t)
             //void assign_pos(int _x1, int _y1, int _x2, int _y2)
@@ -320,17 +338,17 @@ struct frect {
       {
             switch (index) {
 
-                  case 1:	return FloatPoint{ x2,y1 };
-                  case 2:	return FloatPoint{ x2,y2 };
-                  case 3:	return FloatPoint{ x1,y2 };
-                  case 0:
-                  default:
-                        return FloatPoint{ x1, y1 };
+            case 1:	return FloatPoint{ x2,y1 };
+            case 2:	return FloatPoint{ x2,y2 };
+            case 3:	return FloatPoint{ x1,y2 };
+            case 0:
+            default:
+                  return FloatPoint{ x1, y1 };
             }
       }
 };
 
-template<typename ... Args> inline std::string string_format(const std::string & format, Args ... args)
+template<typename ... Args> inline std::string string_format(const std::string& format, Args ... args)
 {
       int size_s = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
       if (size_s <= 0) { throw std::runtime_error("string_format: error during formatting."); }
@@ -353,13 +371,13 @@ inline std::string read_file(std::string filename) {
             return NULL;
       }
 }
-inline std::vector<std::string> str_split(const char * str, char c = ',')
+inline std::vector<std::string> str_split(const char* str, char c = ',')
 {
       std::vector<std::string> result;
 
       do
       {
-            const char * begin = str;
+            const char* begin = str;
 
             while (*str != c && *str)
                   str++;
@@ -377,7 +395,18 @@ inline unsigned long long tm_diff(timespec c, timespec p)
       return s * 1000000 + n / 1000;
 
 }
+inline void lowercase_chararray(pchar v, size_t max_length)
+{
+      size_t pos = 0;
+      while (pos < max_length)
+      {
+            if (!v[pos])
+                  break;
+            v[pos] = (char)tolower(v[pos]);
+            pos++;
+      }
 
+}
 
 
 

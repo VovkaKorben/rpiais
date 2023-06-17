@@ -1,5 +1,6 @@
 #define map_show 1
 #define vessels_show 1
+#include "mydefs.h"
 
 #include <unistd.h>
 #include <cstdio>
@@ -7,7 +8,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cfloat>
-#include "mydefs.h"
+
 #include "pixfont.h"
 #include "video.h"
 #include "nmea.h"
@@ -15,31 +16,51 @@
 #include <limits.h>
 #include <chrono>
 #include "touch.h"
+#include <cstdint>
+#include <bits/stdc++.h>
+#include <stdlib.h>
+//#include <string.h>
 
+#include "nmeastreams.h"
+#include <SimpleIni.h>
 
 #if map_show==1
-const uint64_t SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
-const uint64_t SHAPES_UPDATE_FIRST = 3 * 1000;  // 3 sec for startup updates
-uint64_t next_map_update;
+const uint64 SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
+const uint64 SHAPES_UPDATE_FIRST = 3 * 1000;  // 3 sec for startup updates
+uint64 next_map_update;
 #endif
 
 int min_fit, circle_radius;
-image * img_minus, * img_plus;
+image* img_minus, * img_plus;
 int last_msg_id = 1;// 111203 - 1;
 std::map <int, poly>  shapes;
 
 int show_info_window = 0;
 //using namespace std;
-video_driver * screen;
-mysql_driver * mysql;
-touchscreen * touchscr;
-touch_manager * touchman;
+video_driver* screen;
+mysql_driver* mysql;
+touchscreen* touchscr;
+touch_manager* touchman;
+nmea_reciever* nmea_recv;
+
+
 
 const int max_zoom_index = 9;
 const int ZOOM_RANGE[max_zoom_index] = { 50, 120,200,300, 1000, 2000, 3000, 5000,10000 };
-int zoom_index = 2;
+int zoom_index = 4;
 double  zoom;
-int update_nmea(int msg_id) {
+int init_sock(CSimpleIniA * ini)
+{
+      nmea_recv = new nmea_reciever(ini);
+      return 0;
+}
+int  update_nmea()
+{
+
+      
+      return 0;
+}
+/*int update_nmea(int msg_id) {
       int nmea_result;
       mysql->exec_prepared(PREPARED_NMEA, msg_id);
       mysql->store();
@@ -56,7 +77,7 @@ int update_nmea(int msg_id) {
             printf("NMEA processed: %d\n", total);
 
       return msg_id;
-}
+}*/
 void zoom_changed(int new_zoom_index)
 {
 
@@ -82,7 +103,7 @@ IntPoint transform_point(FloatPoint pt)
       //y = invertYaxis ? CENTER_Y - y - 1 : y + CENTER_Y;
       return IntPoint{ x,y };
 }
-IntRect rotate_shape_box(poly * shape)
+IntRect rotate_shape_box(poly* shape)
 {
       IntRect rct;
       FloatPoint fpt;
@@ -106,7 +127,7 @@ IntRect rotate_shape_box(poly * shape)
 
       return rct;
 }
-IntRect rotate_shape(poly * shape)
+IntRect rotate_shape(poly* shape)
 {
       IntRect rct;
       int first = 1;
@@ -158,17 +179,17 @@ int load_shapes()
             //  sstr.seekg(0, ios::end);            int size = sstr.tellg();
 
       }
-      const std::string & tmp = sstr.str();
-      const char * cstr = tmp.c_str();
+      const std::string& tmp = sstr.str();
+      const char* cstr = tmp.c_str();
 
       // IntRect tmp = VIEWBOX_RECT;
       mysql->exec_prepared(PREPARED_MAP1,
-                           own_vessel.get_meters().x + VIEWBOX_RECT.left() * overlap_coeff,
-                           own_vessel.get_meters().y + VIEWBOX_RECT.bottom() * overlap_coeff,
-                           own_vessel.get_meters().x + VIEWBOX_RECT.right() * overlap_coeff,
-                           own_vessel.get_meters().y + VIEWBOX_RECT.top() * overlap_coeff,
-                           cstr);
-      mysql->free_result();
+            own_vessel.get_meters().x + VIEWBOX_RECT.left() * overlap_coeff,
+            own_vessel.get_meters().y + VIEWBOX_RECT.bottom() * overlap_coeff,
+            own_vessel.get_meters().x + VIEWBOX_RECT.right() * overlap_coeff,
+            own_vessel.get_meters().y + VIEWBOX_RECT.top() * overlap_coeff,
+            cstr);
+      //mysql->free_result();
       while (mysql->has_next());
 
       mysql->exec_prepared(PREPARED_MAP2);
@@ -267,11 +288,11 @@ uint64_t  update_map_data(uint64_t next_check)
 void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 {
       IntRect test_box;
-      const vessel * v;
+      const vessel* v;
       FloatPoint vessel_center, fp;
       IntPoint int_center;
       int circle_size = imax((int)(6 * zoom), 3);
-      for (const auto & vx : vessels)
+      for (const auto& vx : vessels)
       {
             //printf("lat lon: %.12f,%.12f\n", v.lat, v.lon);
            // printf("mmsi lat lon: %d %.12f,%.12f\n",v.first,  v.lat, v.lon);
@@ -351,7 +372,7 @@ void draw_shapes(const ARGB fill_color, const ARGB outline_color)
 
       //rotate box and get new bounds
       IntRect new_box;
-      for (auto & shape : shapes)
+      for (auto& shape : shapes)
             //auto const & ent1 : mymap
             //for (poly shape : shapes)
       {
@@ -375,13 +396,14 @@ void draw_grid(double angle)
       FloatPoint fp = { 0.0,0.0 };
       //const string sides = "ESWN";
       const std::string sides = " S N";
+
       for (int s = 0; s < 4; s++)
       {
             // axis
             fp.x = -angle;
             fp.y = min_fit + 3;
             fp.to_decart();
-            screen->draw_line(CENTER_X, CENTER_Y, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), 0xF0000000);
+            screen->draw_line_v2(CENTER, CENTER.offset(fp.ix(), fp.iy()), 0xF0000000);
 
             // axis letters
             fp.x = -angle;
@@ -414,8 +436,8 @@ void draw_grid(double angle)
 }
 void draw_infoline()
 {
-      const int HMARGIN = 15;
-      const int VMARGIN = 10;
+      const int PIVOTX = CENTER_X, PIVOTY = 20,
+            SPACEX = 3, SPACEY = 1;
       char buf[16] = { 0 };
       using sysclock_t = std::chrono::system_clock;
 
@@ -423,18 +445,18 @@ void draw_infoline()
 
 
       std::strftime(buf, sizeof(buf), "%H:%M:%S", std::localtime(&now));
-      screen->draw_text(FONT_OUTLINE, CENTER_X - HMARGIN, VMARGIN + 10, std::string(buf), VALIGN_BOTTOM | HALIGN_RIGHT, clBlack, clLand, true);
-      std::strftime(buf, sizeof(buf), "%w, %e %b", std::localtime(&now));
-      screen->draw_text(FONT_OUTLINE, CENTER_X - HMARGIN, VMARGIN, "20 May", VALIGN_BOTTOM | HALIGN_RIGHT, clBlack, clLand, true);
+      screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY + SPACEY, std::string(buf), VALIGN_BOTTOM | HALIGN_RIGHT, clBlack, clLand, true);
+      std::strftime(buf, sizeof(buf), "%a,%e %b", std::localtime(&now));
+      screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY - SPACEY, std::string(buf), VALIGN_TOP | HALIGN_RIGHT, clBlack, clLand, true);
 
-      screen->draw_text(FONT_OUTLINE, CENTER_X + HMARGIN, VMARGIN + 10, "\x81 45.343423, 35.12356234", VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clLand, true);
-      screen->draw_text(FONT_OUTLINE, CENTER_X + HMARGIN, VMARGIN, "\x80 5/12", VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clLand, true);
+      screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY + SPACEY, "\x81 45.343423, 35.12356234", VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clLand, true);
+      screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY - SPACEY, "\x80 5/12", VALIGN_TOP | HALIGN_LEFT, clBlack, clLand, true);
 
 }
 void draw_vessels_info() {
       struct less_than_key
       {
-            inline bool operator() (const int & mmsi0, const int & mmsi1)
+            inline bool operator() (const int& mmsi0, const int& mmsi1)
             {
                   double d0 = vessels[mmsi0].distance, d1 = vessels[mmsi1].distance;
                   if (std::isnan(d0)) return false;
@@ -514,7 +536,6 @@ void draw_vessels_info() {
 
 
 }
-
 void draw_infowindow()
 {
       if (!show_info_window)
@@ -526,10 +547,10 @@ void draw_infowindow()
       int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
       if (show_info_window < 0)
       {// global info (sattelites etc)
-            screen->draw_text(FONT_LARGE, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10+screen->get_font_height(FONT_LARGE);
-            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4+screen->get_font_height(FONT_NORMAL);
-            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4+screen->get_font_height(FONT_NORMAL);
-            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4+screen->get_font_height(FONT_NORMAL);
+            screen->draw_text(FONT_MONOMEDIUM, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
+            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
       }
       else
       { // ship info
@@ -595,43 +616,43 @@ void process_touches() {
             {
                   switch (gi)
                   {
-                        case TOUCH_GROUP_ZOOM: {
-                              if (!name.compare("zoomin"))
-                              {
-
-                                    zoom_changed(zoom_index - 1);
-                              }
-                              else if (!name.compare("zoomout"))
-                              {
-                                    zoom_changed(zoom_index + 1);
-                              }
-
-                              break;
-                        }
-                        case TOUCH_GROUP_INFOLINE:
-                        { // show info window
-                              show_info_window = -1;
-
-                              // deactivate all touch groups,except window group
-                              touchman->set_groups_active(0);
-                              if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 1))
-                                    printf("[TOUCH] error set active %d to group %d", 1, TOUCH_GROUP_INFOWINDOW);
-                              break;
-                        }
-                        case TOUCH_GROUP_INFOWINDOW:
-                        { // hide info window
-                              show_info_window = 0;
-                              // enable all touch groups, disable window group
-                              touchman->set_groups_active(1);
-                              if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 0))
-                                    printf("[TOUCH] error set active %d to group %d", 0, TOUCH_GROUP_INFOWINDOW);
-                              break;
-                        }
-                        default:
+                  case TOUCH_GROUP_ZOOM: {
+                        if (!name.compare("zoomin"))
                         {
-                              printf("Unhandled touch group: %d", gi);
-                              break;
+
+                              zoom_changed(zoom_index - 1);
                         }
+                        else if (!name.compare("zoomout"))
+                        {
+                              zoom_changed(zoom_index + 1);
+                        }
+
+                        break;
+                  }
+                  case TOUCH_GROUP_INFOLINE:
+                  { // show info window
+                        show_info_window = -1;
+
+                        // deactivate all touch groups,except window group
+                        touchman->set_groups_active(0);
+                        if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 1))
+                              printf("[TOUCH] error set active %d to group %d", 1, TOUCH_GROUP_INFOWINDOW);
+                        break;
+                  }
+                  case TOUCH_GROUP_INFOWINDOW:
+                  { // hide info window
+                        show_info_window = 0;
+                        // enable all touch groups, disable window group
+                        touchman->set_groups_active(1);
+                        if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 0))
+                              printf("[TOUCH] error set active %d to group %d", 0, TOUCH_GROUP_INFOWINDOW);
+                        break;
+                  }
+                  default:
+                  {
+                        printf("Unhandled touch group: %d", gi);
+                        break;
+                  }
                   }
 
                   //printf("(group %d, name: %s)\n", gi, name.c_str());
@@ -666,7 +687,8 @@ void video_loop_start() {
       while (true)
       {
 
-            last_msg_id = update_nmea(last_msg_id);
+            //last_msg_id = update_nmea(last_msg_id);
+            update_nmea();
             draw_frame();
 
             process_touches();
@@ -726,23 +748,23 @@ void video_loop_start() {
 }
 ////////////////////////////////////////////////////////////
 
-void init_video() {
-      screen = new video_driver("/dev/fb1", 0); // debug purpose = 1 buffer, production value = 5
+void init_video(const char* buff) {
+      screen = new video_driver(buff, 0); // debug purpose = 1 buffer, production value = 5
       if (screen->get_last_error())
       {
             printf("video_init error: %d.\n", screen->get_last_error());
             return;
       }
-      screen->load_font(FONT_LARGE, data_path("/img/large.png"));
-      screen->set_font_interval(FONT_LARGE, 2);
 
       //screen->fill_rect(SCREEN_RECT, clLtGray);
       //screen->draw_text(FONT_LARGE, 100, 100, "XYZ", VALIGN_TOP | HALIGN_LEFT, clRed | clTransparency50, clNone);
 
       screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
       screen->load_font(FONT_NORMAL, data_path("/img/normal.png"));
-      
-      
+      screen->load_font(FONT_MONOMEDIUM, data_path("/img/medium.png"));
+      screen->set_font_interval(FONT_MONOMEDIUM, 2);
+
+
       img_minus = new image(data_path("/img/minus.png"));
       img_plus = new image(data_path("/img/plus.png"));
       min_fit = imin(
@@ -751,8 +773,8 @@ void init_video() {
       ) - 20;
       circle_radius = min_fit / 5;
 }
-void init_touch() {
-      touchscr = new   touchscreen("/dev/input/event1", screen->width(), screen->height());
+void init_touch(const char* buff) {
+      touchscr = new   touchscreen(buff, screen->width(), screen->height());
       touchman = new touch_manager();
 
       touchman->add_group(TOUCH_GROUP_ZOOM, 15);
@@ -779,15 +801,57 @@ void init_database() {
       }
       init_db(mysql);
 }
+void do_poly_test() {
+      poly shape;
+
+      shape.path_count = 1;
+      shape.points_count = 3;
+      shape.pathindex = new int[shape.path_count + 1];
+      shape.pathindex[shape.path_count] = shape.points_count; // set closing point
+      shape.origin = new FloatPoint[shape.points_count];
+      shape.work = new IntPoint[shape.points_count];
+
+      shape.origin[0] = { -70.866, 377.953 };
+      shape.origin[1] = { 283.465, 354.331 };
+      shape.origin[2] = { 59.055, 47.244 };
+      for (int n = 0; n < shape.points_count; n++)
+            shape.work[n] = shape.origin[n].to_int();
+
+
+
+
+
+      screen->fill_rect(SCREEN_RECT, clLtGray);
+      screen->draw_outline_v2(&shape, clBlack);
+
+}
 int main()
 {
+      //printf("Started...\n\n");      std::cout << "Started 2..." << std::endl;
       try {
-            init_video();
-            init_touch();
+            CSimpleIniA ini;
+            std::string ini_filename = data_path("/options.ini");
+            SI_Error rc = ini.LoadFile(ini_filename.c_str());
+            if (rc < 0)
+            {
+                  printf("Error while loading ini-file: %s", ini_filename.c_str());
+                  return EXIT_FAILURE;
+            }
+
+            
+
+            const char* buff;
+            buff = ini.GetValue("main", "video", "/dev/fb0");
+            init_video(buff);
+
+
+
+            buff = ini.GetValue("main", "touch", "/dev/input/event0");
+            init_touch(buff);
             init_database();
 
-
-
+            //do_poly_test();
+            init_sock(&ini);
 
             zoom_changed(zoom_index);
 #if map_show==1
@@ -795,11 +859,11 @@ int main()
 #else
             std::cout << "Map draw disabled (#define map_show 0)" << std::endl;
 #endif
-            touchscr->simulate_click(20, 20);
+            //touchscr->simulate_click(20, 20);
             video_loop_start();
             return 0;
       }
-      catch (char * e) {
+      catch (char* e) {
             std::cerr << "[EXCEPTION] " << e << std::endl;
             return false;
       }
@@ -807,3 +871,4 @@ int main()
 }
 
 
+// 60.39705229794781, 5.315458423270774
