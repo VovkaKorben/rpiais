@@ -19,8 +19,6 @@
 #include <cstdint>
 #include <bits/stdc++.h>
 #include <stdlib.h>
-//#include <string.h>
-
 #include "nmeastreams.h"
 #include <SimpleIni.h>
 
@@ -31,8 +29,12 @@ uint64 next_map_update;
 #endif
 
 int min_fit, circle_radius;
+
+
 image* img_minus, * img_plus;
-int last_msg_id = 1;// 111203 - 1;
+const int32 ZOOM_BTN_MARGIN = 20;
+
+
 std::map <int, poly>  shapes;
 
 int show_info_window = 0;
@@ -42,6 +44,7 @@ mysql_driver* mysql;
 touchscreen* touchscr;
 touch_manager* touchman;
 nmea_reciever* nmea_recv;
+StringArray  nmea_list;
 
 
 
@@ -49,15 +52,15 @@ const int max_zoom_index = 9;
 const int ZOOM_RANGE[max_zoom_index] = { 50, 120,200,300, 1000, 2000, 3000, 5000,10000 };
 int zoom_index = 4;
 double  zoom;
-int init_sock(CSimpleIniA * ini)
+int init_sock(CSimpleIniA* ini)
 {
-      nmea_recv = new nmea_reciever(ini);
+      nmea_recv = new nmea_reciever(ini,&nmea_list);
       return 0;
 }
 int  update_nmea()
 {
 
-      
+
       return 0;
 }
 /*int update_nmea(int msg_id) {
@@ -590,8 +593,8 @@ void draw_frame()
       draw_vessels_info();
 
       // plus and minus images
-      screen->draw_image(img_minus, 10, 307, HALIGN_LEFT | VALIGN_TOP, 150);
-      screen->draw_image(img_plus, 272, 316, HALIGN_LEFT | VALIGN_TOP, 150);
+      screen->draw_image(img_minus, ZOOM_BTN_MARGIN, screen->height() - ZOOM_BTN_MARGIN, HALIGN_LEFT | VALIGN_TOP, 150);
+      screen->draw_image(img_plus, SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN, screen->height() - ZOOM_BTN_MARGIN, HALIGN_RIGHT | VALIGN_TOP, 150);
 
       draw_infoline();
 
@@ -606,60 +609,60 @@ void process_touches() {
 
       std::string name;
       int32 gi;
-      touches_coords t;
+      touches_coords_s t;
       //touchman->check_point(30, 300, gi, name);
       while (touchscr->pop(t))
       {
-            printf("-- Touch: %d,%d --\n\n", t.adjusted.x, t.adjusted.y);
-
-            if (touchman->check_point(t.adjusted.x, t.adjusted.y, gi, name))
+            printf("Touch: %d,%d ... ", t.adjusted[0], t.adjusted[1]);
+            if (touchman->check_point(t.adjusted[0], t.adjusted[1], gi, name))
             {
+                  printf("OK\n");
                   switch (gi)
                   {
-                  case TOUCH_GROUP_ZOOM: {
-                        if (!name.compare("zoomin"))
-                        {
+                        case TOUCH_GROUP_ZOOM: {
+                              if (!name.compare("zoomin"))
+                              {
 
-                              zoom_changed(zoom_index - 1);
+                                    zoom_changed(zoom_index - 1);
+                              }
+                              else if (!name.compare("zoomout"))
+                              {
+                                    zoom_changed(zoom_index + 1);
+                              }
+
+                              break;
                         }
-                        else if (!name.compare("zoomout"))
-                        {
-                              zoom_changed(zoom_index + 1);
+                        case TOUCH_GROUP_INFOLINE:
+                        { // show info window
+                              show_info_window = -1;
+
+                              // deactivate all touch groups,except window group
+                              touchman->set_groups_active(0);
+                              if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 1))
+                                    printf("[TOUCH] error set active %d to group %d", 1, TOUCH_GROUP_INFOWINDOW);
+                              break;
                         }
-
-                        break;
-                  }
-                  case TOUCH_GROUP_INFOLINE:
-                  { // show info window
-                        show_info_window = -1;
-
-                        // deactivate all touch groups,except window group
-                        touchman->set_groups_active(0);
-                        if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 1))
-                              printf("[TOUCH] error set active %d to group %d", 1, TOUCH_GROUP_INFOWINDOW);
-                        break;
-                  }
-                  case TOUCH_GROUP_INFOWINDOW:
-                  { // hide info window
-                        show_info_window = 0;
-                        // enable all touch groups, disable window group
-                        touchman->set_groups_active(1);
-                        if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 0))
-                              printf("[TOUCH] error set active %d to group %d", 0, TOUCH_GROUP_INFOWINDOW);
-                        break;
-                  }
-                  default:
-                  {
-                        printf("Unhandled touch group: %d", gi);
-                        break;
-                  }
+                        case TOUCH_GROUP_INFOWINDOW:
+                        { // hide info window
+                              show_info_window = 0;
+                              // enable all touch groups, disable window group
+                              touchman->set_groups_active(1);
+                              if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 0))
+                                    printf("[TOUCH] error set active %d to group %d", 0, TOUCH_GROUP_INFOWINDOW);
+                              break;
+                        }
+                        default:
+                        {
+                              printf("Unhandled touch group: %d", gi);
+                              break;
+                        }
                   }
 
                   //printf("(group %d, name: %s)\n", gi, name.c_str());
-                  touchman->dump();
+                  //touchman->dump();
             }
             else
-                  printf("(not found)\n");
+                  printf("not found\n");
       }
 
 
@@ -765,7 +768,7 @@ void init_video(const char* buff) {
       screen->set_font_interval(FONT_MONOMEDIUM, 2);
 
 
-      img_minus = new image(data_path("/img/minus.png"));
+      img_minus = new image(data_path("/img/minus_v2.png"));
       img_plus = new image(data_path("/img/plus.png"));
       min_fit = imin(
             imin(CENTER_X, screen->width() - CENTER_X),
@@ -773,13 +776,24 @@ void init_video(const char* buff) {
       ) - 20;
       circle_radius = min_fit / 5;
 }
-void init_touch(const char* buff) {
-      touchscr = new   touchscreen(buff, screen->width(), screen->height());
+void init_touch(CSimpleIniA* ini) {
+
+      touchscr = new   touchscreen(ini, screen->width(), screen->height());
       touchman = new touch_manager();
 
       touchman->add_group(TOUCH_GROUP_ZOOM, 15);
-      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomout", { 29,297 , 23 });
-      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomin", { 291,297 , 23 });
+      IntRect rct;
+      rct.set_left(ZOOM_BTN_MARGIN);
+      rct.set_top(screen->height() - ZOOM_BTN_MARGIN);
+      rct.set_right(rct.left() + img_minus->width());
+      rct.set_bottom(rct.top() - img_minus->height());
+      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomout", rct.center(), 40);
+
+
+      rct.set_right(SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN);
+      rct.set_left(rct.right() - img_plus->width());
+      rct.set_bottom(rct.top() - img_plus->height());
+      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomin", rct.center(), 40);
 
 
       touchman->add_group(TOUCH_GROUP_SHIPSHAPE, 5);
@@ -787,7 +801,7 @@ void init_touch(const char* buff) {
       //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
 
       touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
-      touchman->add_rect(TOUCH_GROUP_INFOLINE, "info", { 0,0,480,40 });
+      touchman->add_rect(TOUCH_GROUP_INFOLINE, "info", { SCREEN_RECT.left(),SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
 
       touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
       touchman->add_rect(TOUCH_GROUP_INFOWINDOW, "window", WINDOW_RECT);
@@ -838,7 +852,7 @@ int main()
                   return EXIT_FAILURE;
             }
 
-            
+
 
             const char* buff;
             buff = ini.GetValue("main", "video", "/dev/fb0");
@@ -846,8 +860,8 @@ int main()
 
 
 
-            buff = ini.GetValue("main", "touch", "/dev/input/event0");
-            init_touch(buff);
+
+            init_touch(&ini);
             init_database();
 
             //do_poly_test();

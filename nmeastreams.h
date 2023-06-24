@@ -10,10 +10,15 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <SimpleIni.h>
+#include <thread>
 
 struct sockets_s
 {
-      int sockfd, type;
+      int32 enabled, sockfd, type;
+      uint16 port;
+      //std::string ;
+      const char* addr,* name;
+      char type_str[256];
       struct sockaddr_in servaddr;
 };
 
@@ -21,10 +26,11 @@ struct sockets_s
 class nmea_reciever
 {
 private:
-      std::vector<sockets_s> socklist;
+      std::vector<std::thread> threadlist;
 public:
-      nmea_reciever(CSimpleIniA * ini);
+      nmea_reciever(CSimpleIniA* ini, PStringArray list);
+     // void rcv_thread(sockets_s  opt);
       ~nmea_reciever();
-      StringArray get_data();
+      //StringArray get_data();
 };
 #endif

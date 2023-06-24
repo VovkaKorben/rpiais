@@ -10,6 +10,8 @@
 #include <map>
 #include <unordered_map>
 #include <utility>
+#include <SimpleIni.h>
+#include <linux/input.h>
 
 #ifndef NDEBUG 
 #include "video.h" // 
@@ -24,39 +26,45 @@
 #define TOUCH_TYPE_RECT 0
 #define TOUCH_TYPE_CIRCLE 1
 
-struct touches_c
+#define BITS_PER_LONG (sizeof(long) * 8)
+#define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
+#define OFF(x)  ((x)%BITS_PER_LONG)
+#define BIT(x)  (1UL<<OFF(x))
+#define LONG(x) ((x)/BITS_PER_LONG)
+#define test_bit(bit, array)	((array[LONG(bit)] >> OFF(bit)) & 1)
+#define testbit(bit, var)	((var[LONG(bit)] >> OFF(bit)) & 1)
+
+
+
+struct touches_coords_s
 {
-      int32 x, y, p;
+      int32 raw[3];
+      int32 adjusted[3];
 };
-struct touches_coords
+struct devinfo_s
 {
-      touches_c raw, adjusted;
+      int32 fd;
+      char devpath[256], devname[256];
+      unsigned long bit[2][NBITS(KEY_MAX)];
+      int abs[3][6] = { 0 };
+
 };
 class touchscreen
 {
 private:
-      int fd;
-
-      //pthread_t thid;      pthread_mutex_t mtx;
+      devinfo_s di;
+      int32 get_devinfo(int32 index, devinfo_s* devinfo);
       std::mutex m;
-      std::thread * t;
+      std::thread* t;
       void t_func();
-
-
-      std::vector<touches_coords> touches;
-
-      //IntRect phys;
-      //int screen_w, screen_h;
-      float kx, ky, kp;
-      int get_details(int w, int h);
-      char devname[256];
-      static void * read_func(void * arg);
-      // long getTouchSample(int * x, int * y, int * p);
+      std::vector<touches_coords_s> touches;
+      float min_correction[3],minval[3], maxval[3], zoom[3];
+            int invert[3];
+      int32 max_axes;
 public:
       size_t count();
-      bool pop(touches_coords & t);
-      // const char * get_name() { return devname; }
-      touchscreen(const char * devname, int32 w, int32 h);
+      bool pop(touches_coords_s& t);
+      touchscreen(CSimpleIniA* ini, int32 w, int32 h);
       ~touchscreen();
       void simulate_click(int32 x, int32 y);
 };
@@ -75,9 +83,9 @@ struct touch_coords
             {
                   case TOUCH_TYPE_RECT: {
                         if (x < coords[0] ||
-                            y < coords[1] ||
-                            x > coords[2] ||
-                            y > coords[3]) return 0;
+                              y < coords[1] ||
+                              x > coords[2] ||
+                              y > coords[3]) return 0;
                         return 1;
                   }
                   case TOUCH_TYPE_CIRCLE: {
@@ -91,7 +99,7 @@ struct touch_coords
       }
 };
 struct touch_group {
-      int32 id,priority, active;
+      int32 id, priority, active;
       std::vector <touch_coords> areas;
 };
 //typedef int32 touch_group_id;
@@ -101,7 +109,7 @@ class touch_manager
 private:
       std::vector <touch_group> groups;
       //std::unordered_map<int, std::vector <touch_coords>> areas;
-      touch_group * get_group(int group_index);
+      touch_group* get_group(int group_index);
       void sort_by_priority();
 public:
       touch_manager();
@@ -112,11 +120,12 @@ public:
       int clear_group(int32 group_id);
       int add_rect(int32 group_id, std::string shapename, IntRect rct);
       int add_point(int32 group_id, std::string shapename, IntCircle circle);
+      int add_point(int32 group_id, std::string shapename, IntPoint center, int32 radius);
       void dump();
-      int check_point(const int32 x, const int32 y, int32 & group_id, std::string & shapename);
+      int check_point(const int32 x, const int32 y, int32& group_id, std::string& shapename);
       //int check_point(const int32 x, const int32 y, int32 & group_index, int32 & area_index);
 #ifndef NDEBUG
-      void debug(video_driver * screen);
+      void debug(video_driver* screen);
 #endif // !1
 
 

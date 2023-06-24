@@ -14,7 +14,7 @@
 #include <memory>
 #include <cmath>
 #include  <algorithm>
-
+#include  <cstring>
 #include <sys/stat.h>
 
 #define PI 3.141592653589793238462643383279
@@ -112,6 +112,7 @@ inline int imax(int v1, int v2)
 
 //using namespace std;
 typedef std::vector<std::string> StringArray;
+typedef std::vector<std::string>* PStringArray;
 typedef std::vector<StringArray> StringArrayBulk;
 
 inline bool is_zero(double v1) { return std::abs(v1) < 0.000001; }
@@ -283,7 +284,7 @@ public:
       void set_top(int v) { y2 = v; }
       IntPoint center()
       {
-            return { 0,0 };
+            return { x1 + (x2 - x1) / 2,y1 + (y2 - y1) / 2 };
             //            IntPoint r;
       }
       IntRect() {};
@@ -338,12 +339,12 @@ struct frect {
       {
             switch (index) {
 
-            case 1:	return FloatPoint{ x2,y1 };
-            case 2:	return FloatPoint{ x2,y2 };
-            case 3:	return FloatPoint{ x1,y2 };
-            case 0:
-            default:
-                  return FloatPoint{ x1, y1 };
+                  case 1:	return FloatPoint{ x2,y1 };
+                  case 2:	return FloatPoint{ x2,y2 };
+                  case 3:	return FloatPoint{ x1,y2 };
+                  case 0:
+                  default:
+                        return FloatPoint{ x1, y1 };
             }
       }
 };
@@ -395,10 +396,26 @@ inline unsigned long long tm_diff(timespec c, timespec p)
       return s * 1000000 + n / 1000;
 
 }
-inline void lowercase_chararray(pchar v, size_t max_length)
+inline int32 length_chararray(pchar str)
 {
-      size_t pos = 0;
-      while (pos < max_length)
+      int32 result = 0;
+      while (str[result])
+            result++;
+      return result;
+
+}
+inline int32 length_constchararray(const char * str)
+{
+      int32 result = 0;
+      while (str[result])
+            result++;
+      return result;
+
+}
+inline void lowercase_chararray(pchar v, int32 length)
+{
+      int32 pos = 0;
+      while (pos < length)
       {
             if (!v[pos])
                   break;
@@ -406,6 +423,26 @@ inline void lowercase_chararray(pchar v, size_t max_length)
             pos++;
       }
 
+}
+inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start = 0)
+{
+      int32 needle_len = length_chararray(needle);
+      end -= needle_len;
+
+      int32  found_count, c;
+      while (start < end)
+      {
+            found_count = 0;
+            for (c = 0; c < needle_len; c++)
+                  if (hash[start + c] == needle[c])
+                        found_count++;
+                  else
+                        break;
+            if (found_count == needle_len)
+                  return start;
+            start++;
+      }
+      return -1;
 }
 
 

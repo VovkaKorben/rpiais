@@ -35,7 +35,7 @@ IntPoint CENTER;
 
 IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
 ////////////////////////////////////////////////////////////
-  
+
 
 ////////////////////////////////////////////////////////////
 void video_driver::flip()
@@ -46,7 +46,7 @@ void video_driver::flip()
             vinfo.yoffset = vinfo.yres * current_fb;
             if (ioctl(fbdev, FBIOPAN_DISPLAY, &vinfo)) { last_error = FB_PAN_DISPLAY_FAILED; return; }
             current_fb = (current_fb + 1) % buffer_count;
-            pix_buf = fb_start + pixel_count * current_fb;
+            //pix_buf = fb_start + pixel_count * current_fb;
       }
       else
       {
@@ -55,15 +55,21 @@ void video_driver::flip()
       last_error = FB_NO_ERROR;
 }
 
+// _buffer_count = 0, used internal offscreen buffer
+// _buffer_count = 1, uses current screen as is
+// _buffer_count = >1, tries to change framebuffer
 
 
 
-video_driver::video_driver(const char* devname, int _buffer_count)
-{
+video_driver::video_driver(const char* devname, int _buffer_count) {
+#ifndef bpp
+      printf("No bit per pixel defined, aborting\n");
+      abort();
+#endif 
 
-
-      // open device
       struct fb_fix_screeninfo finfo;
+
+      // create file descriptor
       fbdev = open(devname, O_RDWR);
       if (fbdev == -1)
       {
@@ -72,64 +78,105 @@ video_driver::video_driver(const char* devname, int _buffer_count)
             return;
       }
 
-      // get VINFO/FINFO and set buffer count
+      // get initial virtual info
       if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) {
+            perror("ioctl");
             last_error = FB_GET_VSCREENINFO_FAILED;
             return;
       }
 
-      // setup screen numbers
-      _width = vinfo.xres,
-            _height = vinfo.yres;
-      pixel_count = _width * _height;
-      screen_size = pixel_count * vinfo.bits_per_pixel / 8;
+      int32 real_buffers = _buffer_count;
+      if (!real_buffers)
+            real_buffers = 1;
 
-      if (_buffer_count > 0)
-      {
-            vinfo.yres_virtual = vinfo.yres * _buffer_count;
+      // try setup virtual bounds to visible dimensions
+      if (_buffer_count > 1) {
+            uint32 desired_width = vinfo.xres;
+            uint32 desired_height = vinfo.yres * real_buffers;
+
+            vinfo.xres_virtual = desired_width;
+            vinfo.yres_virtual = desired_height;
+            vinfo.bits_per_pixel = bpp;
             if (ioctl(fbdev, FBIOPUT_VSCREENINFO, &vinfo)) {
                   printf("video_driver init: Error setting variable information.\n");
             }
-            if (vinfo.yres != vinfo.yres_virtual)
-                  _buffer_count = 1;
-            buffer_count = _buffer_count;
+            // get updated virtual info
+            if (ioctl(fbdev, FBIOGET_VSCREENINFO, &vinfo)) {
+                  perror("ioctl");
+                  last_error = FB_GET_VSCREENINFO_FAILED;
+                  return;
+            }
       }
-      else {
-            _buffer_count = 1;
-            buffer_count = 0;
+#if bpp==16
+      if (vinfo.bits_per_pixel != 16) {
+            printf("Bit per pixel mismatch, expect 16, got %d\n", vinfo.bits_per_pixel);
+            abort();
       }
+#endif 
+#if bpp==32
+      if (vinfo.bits_per_pixel != 32) {
+            printf("Bit per pixel mismatch, expect 32, got %d\n", vinfo.bits_per_pixel);
+            abort();
+      }
+#endif 
 
 
-      // check FINFO is ok
-      if (ioctl(fbdev, FBIOGET_FSCREENINFO, &finfo)) { last_error = FB_GET_FSCREENINFO_FAILED; return; }
+      // setup screen numbers
+      buffer_count = _buffer_count;
+      _width = vinfo.xres, _height = vinfo.yres;
+      screen_size = vinfo.xres_virtual * vinfo.yres_virtual * vinfo.bits_per_pixel / 8;
+
+      /*  if (_buffer_count > 0)
+        {
+              vinfo.xres_virtual = vinfo.xres;
+              vinfo.yres_virtual = vinfo.yres * _buffer_count;
+              if (ioctl(fbdev, FBIOPUT_VSCREENINFO, &vinfo)) {
+                    printf("video_driver init: Error setting variable information.\n");
+              }
+              if (vinfo.yres != vinfo.yres_virtual)
+                    _buffer_count = 1;
+              buffer_count = _buffer_count;
+  }
+        else {
+              _buffer_count = 1;
+              buffer_count = 0;
+        }
+        */
+
+        // check FINFO is ok
+      if (ioctl(fbdev, FBIOGET_FSCREENINFO, &finfo)) {
+            last_error = FB_GET_FSCREENINFO_FAILED;
+            return;
+      }
       if ((intptr_t)finfo.smem_start == 0)
       {
             printf("FBIOGET_FSCREENINFO returns invalid buffer address.\n");
-            last_error = FB_INVALID_BUFFER_ADDRESS;
+            //last_error = FB_INVALID_BUFFER_ADDRESS;
       }
 
 
       // map fb memory
-      fb_start = (PIX_PTR)mmap(NULL, screen_size * _buffer_count, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);
-      if ((intptr_t)fb_start == -1) { last_error = FB_MMAP_FAILED; return; }
+      puint8 tmp_mmap, tmp_offscreen;
+      tmp_mmap = (puint8)mmap(NULL, screen_size, PROT_WRITE | PROT_READ, MAP_SHARED, fbdev, 0);
+      if ((intptr_t)tmp_mmap == -1) {
+            last_error = FB_MMAP_FAILED;
+            return;
+      }
 
-      if (buffer_count)
-      {
-            pix_buf = fb_start;
+      if (buffer_count) {
+            tmp_offscreen = tmp_mmap;
             current_fb = 0;
       }
-      else
-      {
-            pix_buf = (PIX_PTR)malloc(screen_size);
+      else {
+            tmp_offscreen = (puint8)malloc(screen_size);
       }
 
-
+      fb_start = (PXPTR)tmp_mmap;
+      pix_buf = (PXPTR)tmp_offscreen;
 
       // creating rects
-      CENTER_X = _width / 3,
-            CENTER_Y = _height / 2;
-      CENTER.x = CENTER_X;
-      CENTER.y = CENTER_Y;
+      CENTER_X = _width / 3, CENTER_Y = _height / 2;
+      CENTER.x = CENTER_X, CENTER.y = CENTER_Y;
       VIEWBOX_RECT = IntRect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
       SCREEN_RECT = IntRect{ 0, 0, _width - 1, _height - 1 };
       SHIPLIST_RECT = IntRect{ CENTER_X * 2, 0,_width - 1, _height - 1 };
@@ -157,33 +204,59 @@ inline void video_driver::draw_pix(const int32 x, const int32 y, const ARGB colo
       if (x >= _width) return;
       if (y >= _height) return;
       //puint8 addr = (puint8)(pix_ptr - y * SCANLINE_LEN + x * BYTES_PER_PIXEL);
-      PIX_PTR addr = pix_buf + (_height - y - 1) * _width + x;
+      int a = _height - y - 1;
+      a = a * vinfo.xres_virtual;
+      a = a + x;
+
+      PXPTR addr = pix_buf + (_height - y - 1) * vinfo.xres_virtual + x;
 
       int alpha = color >> 24;
+
 
       if (alpha == 0)
       {
             // no transparency at all
-            *((puint16)addr) = rgb888to565(color);
+#if bpp==16  
+            * addr = rgb888to565(color);
+#endif
+#if bpp==32
+            * addr = color;
+#endif
       }
       else if (alpha != 255) // has semi-transparency
       {
             float a = (float)alpha / 255.0f, ia = 1.0f - a;
-            uint16 c = *((puint16)addr);
+
+#if bpp==16  
+            uint16 c = *addr;
 
             uint32 r = ((color & 0x00FF0000) >> 8) * ia + (c & 0xF800) * a;
             uint32 g = ((color & 0x0000FF00) >> 5) * ia + (c & 0x07E0) * a;
             uint32 b = ((color & 0x000000FF) >> 3) * ia + (c & 0x001F) * a;
 
-            *((puint16)addr) = (r & 0xF800) | (g & 0x07E0) | (b & 0x001F);
+            *addr = (r & 0xF800) | (g & 0x07E0) | (b & 0x001F);
+#endif
+#if bpp==32
+            uint32 bgcolor = *addr;
+
+            uint8 r = ((color & 0x00FF0000) >> 16) * ia + ((bgcolor & 0x00FF0000) >> 16) * a;
+            uint8 g = ((color & 0x0000FF00) >> 8) * ia + ((bgcolor & 0x0000FF00) >> 8) * a;
+            uint8 b = (color & 0x000000FF) * ia + (bgcolor & 0x000000FF) * a;
+
+            *addr = (r << 16) | (g << 8) | b;
+
+#endif
+
+
 
       }
 
-
 }
 
-
-
+#if bpp==16  
+#endif
+#if bpp==32
+#endif
 void video_driver::rectangle(IntRect rct, const ARGB color) {
       int i;
       for (i = rct.left(); i <= rct.right(); i++)
@@ -246,45 +319,18 @@ void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
       if (xe >= _width) xe = _width - 1;
 
       xe -= xs;
-      PIX_PTR addr = pix_buf + (_height - y - 1) * _width + xs;
+      PXPTR addr = pix_buf + (_height - y - 1) * vinfo.xres_virtual + xs;
+#if bpp==16
       uint16 c = rgb888to565(color);
       while (xe--)
             *(addr++) = c;
-
-
+#endif
+#if bpp==32
+      while (xe--)
+            *(addr++) = color;
+#endif
 }
-/*
-void video_driver::draw_polyline(int32 x, int32 y, const ARGB color, int close_polyline)
-{
-      static int32 count = 0;
-      static int32 first_x, first_y;
-      static int32 prev_x, prev_y;
 
-      if (close_polyline != 0 && count > 1)
-      { // close polyline
-            draw_line(prev_x, prev_y, first_x, first_y, color);
-            count = 0;
-      }
-      else
-      {
-            if (count == 0)
-            { // init polyline
-                  first_x = x;
-                  first_y = y;
-                  prev_x = x;
-                  prev_y = y;
-            }
-            else
-                  if (prev_x != x || prev_y != y)
-                  {
-                        //printf("%d,%d -> %d,%d\n", prev_x, prev_y, x, y );
-                        draw_line(prev_x, prev_y, x, y, color);
-                        prev_x = x;
-                        prev_y = y;
-                  }
-            count++;
-      }
-}*/
 void video_driver::draw_image(image* img, int x, int y, int flags, int transparency)
 {
       if (!img->is_loaded()) return;
@@ -298,7 +344,7 @@ void video_driver::draw_image(image* img, int x, int y, int flags, int transpare
                   //WARN_CONVERSION_OFF
                   // transparency = 255- transparency ;
       puint8 src = img->data_ptr();
-      PIX_PTR dst_start = pix_buf + (_height - y - 1) * _width + x,
+      PXPTR dst_start = pix_buf + (_height - y - 1) * vinfo.xres_virtual + x,
             dst_current;
       uint8 r, g, b;
       float a, ia;
@@ -311,14 +357,24 @@ void video_driver::draw_image(image* img, int x, int y, int flags, int transpare
             while (tx--)
             {
                   a = ((*(src + 3)) * transparency) / 65025.0f, ia = 1.0f - a;
-
+#if bpp==16
                   r = (*src) * a + ((*dst_current >> 8) & 0xF8) * ia; src++;
                   g = (*src) * a + ((*dst_current >> 3) & 0xFC) * ia; src++;
                   b = (*src) * a + ((*dst_current << 3) & 0xF8) * ia; src += 2;
-                  // combine colors
-                  *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); dst_current++;
+                  *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+#endif
+#if bpp==32
+                  r = (*src) * a + ((*dst_current >> 16) & 0xFF) * ia; src++;
+                  g = (*src) * a + ((*dst_current >> 8) & 0xFF) * ia; src++;
+                  b = (*src) * a + (*dst_current & 0xFF) * ia; src += 2;
+                  *dst_current = (r << 16) | (g << 8) | b;
+#endif
+
+
+
+                  dst_current++;
             }
-            dst_start += _width; // proceed to next line
+            dst_start += vinfo.xres_virtual; // proceed to next line
       }
       //   WARN_RESTORE            WARN_RESTORE
 
@@ -598,28 +654,7 @@ void video_driver::draw_fill(const ARGB color)
       }
 
 }
-/*void video_driver::draw_outline(const poly * sh, const ARGB color)
-{
-      IntPoint * point;
-      int32 path_end, point_id = 0;
-      for (int path_id = 0; path_id < sh->path_count; path_id++)
-      {
-            path_end = sh->pathindex[path_id + 1];
-            //prev_point = &sh->work[path_end - 1];
 
-            while (point_id < path_end)
-            {
-
-                  point = &sh->work[point_id];
-                  draw_polyline(point->x, point->y, color, 0);
-                  // prev_point = point;
-                  point_id++;
-            }
-
-            draw_polyline(0, 0, color, 1); // close poly
-
-      }
-}*/
 typedef int OutCode;
 
 const int INSIDE = 0; // 0000
@@ -737,9 +772,6 @@ void video_driver::draw_outline_v2(const poly* sh, const ARGB color)
                   prev_point = point;
                   point_id++;
             }
-
-            //draw_polyline(0, 0, color, 1); // close poly
-
       }
 }
 ////////////////////////////////////////////////////////////

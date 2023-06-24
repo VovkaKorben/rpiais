@@ -6,20 +6,16 @@
 #include <dirent.h>
 #include <vector>
 #include <unistd.h>
-#include <stdlib.h>     /* abs */
+#include <stdlib.h>    
 #include <errno.h>
-//#include <pthread.h>
 #include <mutex>
 #include <map>
 #include <set>
+#include <SimpleIni.h>
+#include<numeric>
 
-#define BITS_PER_LONG (sizeof(long) * 8)
-#define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
-#define OFF(x)  ((x)%BITS_PER_LONG)
-#define BIT(x)  (1UL<<OFF(x))
-#define LONG(x) ((x)/BITS_PER_LONG)
-#define test_bit(bit, array)	((array[LONG(bit)] >> OFF(bit)) & 1)
-#define testbit(bit, var)	((var[LONG(bit)] >> OFF(bit)) & 1)
+std::map<int32, int32> evmap = { {ABS_X,0},{ABS_Y,1},{ABS_PRESSURE,2} };
+
 size_t touchscreen::count()
 {
       m.lock();
@@ -27,7 +23,7 @@ size_t touchscreen::count()
       m.unlock();
       return r;
 }
-bool touchscreen::pop(touches_coords & t)
+bool touchscreen::pop(touches_coords_s& t)
 {
       bool r;
       m.lock();
@@ -45,102 +41,292 @@ bool touchscreen::pop(touches_coords & t)
 void touchscreen::t_func()
 {
       // this is calibrate coefficients from my ADS7846 Touchscreen
-      const float kminx = 254.9156485f,
+      /*kminx = 254.9156485f,
             kminy = 176.2642045f,
             kx = 7.800794173f,
             ky = 11.72346591f;
+            */
 
+      std::vector<int32> collect[3];
+      touches_coords_s touches_coords;
+      // int32 last_values[3] = { 0 };      touches_c median_val = { 0,0,0 },            adjusted_val = { 0,0,0 };
+       // std::vector <touches_c> median;
 
-
-      std::vector <touches_c> median;
-      int x = 0, y = 0, p = 0;
       const  ssize_t evsz = sizeof(struct input_event);
       struct input_event ev[64];
       ssize_t rb;
       int started = 0;
-      while (true)
-      {
-            // printf("t_func\n");
-            rb = read(fd, ev, evsz * 64);
-            //printf("t_func readed: %d\n", rb);
+      while (true) {
+            rb = read(di.fd, ev, evsz * 64);
             if (rb >= 0)
                   for (ssize_t i = 0; i < (rb / evsz); i++) {
-                        if (ev[i].type == EV_SYN)
-                        { // event sync
-                              if (started)
-                              {
-                                    median.push_back({ x, y, p });
-                                    //printf("push_back\n");
-                              }
-                        }
-                        else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 1)
-                        { // touch start
-                              median.clear();
-                              //printf("started\n");
-                              started = 1;
-                        }
 
-                        else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 0)
-                        {// touch end
-                              //printf("touch end\n");
-                              started = 0;
-                              int32 sample_cnt = (int32)median.size();
-                              if (sample_cnt)
-                              {
-                                    touches_c median_val = { 0,0,0 },
-                                          adjusted_val = { 0,0,0 };
-                                    for (int32 n = 0; n < sample_cnt; n++)
-                                    {
-                                          median_val.x += median[n].x;
-                                          median_val.y += median[n].y;
-                                          median_val.p += median[n].p;
+                        switch (ev[i].type) {
+                              case EV_SYN: {
+                                    if (started) {
+                                          //median.push_back({ x, y, p });
                                     }
-                                    median_val.x /= sample_cnt;
-                                    median_val.y /= sample_cnt;
-                                    median_val.p /= sample_cnt;
-                                    adjusted_val.x = (int)(((float)median_val.x - kminx) / kx);
-                                    adjusted_val.y = (int)(((float)median_val.y - kminy) / ky);
-
-                                    m.lock();
-                                    //printf("Touch Finished\n");
-                                    touches.push_back({ median_val,adjusted_val });
-                                    m.unlock();
+                                    break;
                               }
+                              case EV_KEY: {
+                                    switch (ev[i].code) {
+                                          case BTN_LEFT:
+                                          case BTN_RIGHT:
+                                          case BTN_TOUCH:
+                                                if (ev[i].value == 1) { // pressed
+                                                      for (int c = 0; c < max_axes; c++)
+                                                            collect[c].clear();
+                                                      //median.clear();
+                                                      started = 1;
+                                                }
+                                                else {// released
+                                                      for (int c = 0; c < max_axes; c++)
+                                                      {
+                                                            if (collect[c].size())
+                                                                  touches_coords.raw[c] = std::accumulate(collect[c].begin(), collect[c].end(), 0) / (int32)collect[c].size();
+
+                                                            // convert raw to adjusted
+                                                            touches_coords.adjusted[c] = touches_coords.raw[c];
+                                                            if (invert[c])
+                                                                  touches_coords.adjusted[c] = (maxval[c] - minval[c]) - touches_coords.adjusted[c];
+                                                          
+                                                            touches_coords.adjusted[c] -= min_correction[c];
+                                                            touches_coords.adjusted[c] *= zoom[c];
+                                                            
+
+                                                      }
 
 
-                        }
-                        else if (ev[i].type == EV_ABS && ev[i].code == 0 && ev[i].value > 0) {
-                              //printf("\tY: %d\n", ev[i].value);
-                              //*y = (int)((float)ev[i].value * ky);
-                             //y = (int)((float)ev[i].value * ky);
-                              y = ev[i].value;
-                        }
-                        else if (ev[i].type == EV_ABS && ev[i].code == 1 && ev[i].value > 0) {
-                              //printf("\tX: %d\n", ev[i].value);
-                              //*x = (int)((float)ev[i].value * kx);
-                              //*x = ev[i].value * kx;
-                              //x = (int)((float)ev[i].value * kx);
-                              x = ev[i].value;
-                        }
-                        else if (ev[i].type == EV_ABS && ev[i].code == 24 && ev[i].value > 0) {
-                              //printf("\tP: %d\n", ev[i].value);
-                              //p = (int)((float)ev[i].value * kp);
-                              p = ev[i].value;
-                        }
 
+
+                                                      m.lock();
+                                                      //printf("Touch Finished\n");
+                                                      touches.push_back(touches_coords);
+                                                      m.unlock();
+                                                      /*
+                                                      started = 0;
+                  int32 sample_cnt = (int32)median.size();
+                  if (sample_cnt)
+                  {
+                        touches_c median_val = { 0,0,0 },
+                              adjusted_val = { 0,0,0 };
+                        for (int32 n = 0; n < sample_cnt; n++)
+                        {
+                              median_val.x += median[n].x;
+                              median_val.y += median[n].y;
+                              median_val.p += median[n].p;
+                        }
+                        median_val.x /= sample_cnt;
+                        median_val.y /= sample_cnt;
+                        median_val.p /= sample_cnt;
+                        adjusted_val.x = (int)(((float)median_val.x - kminx) / kx);
+                        adjusted_val.y = (int)(((float)median_val.y - kminy) / ky);
+
+                        m.lock();
+                        //printf("Touch Finished\n");
+                        touches.push_back({ median_val,adjusted_val });
+                        m.unlock();
                   }
+                                                      */
+                                                }
+                                                break;
+                                    }
+                                    break;
+                              }
+                              case EV_ABS: {
+                                    if (evmap.count(ev[i].code)) // check if event allowed
+                                    {
+                                          int32 axis_index = evmap[ev[i].code];
+                                          if (started)
+                                                collect[axis_index].push_back(ev[i].value);
+                                          touches_coords.raw[axis_index] = ev[i].value;
 
-
-
+                                    }
+                                    break;
+                              }
+                        }
+                  }
             usleep(50000);
       }
 }
-touchscreen::touchscreen(const char * devname, int32 w, int32 h)
-{
-      fd = open(devname, O_RDONLY);
-      if (fd < 0) { printf("Error opening device: %s\n", devname);            return; }
-      if (get_details(w, h)) { printf("Error get details for %s\n", devname);            return; }
+/*
+if (ev[i].type == EV_SYN)
+{ // event sync
+      if (started)
+      {
+            median.push_back({ x, y, p });
+            //printf("push_back\n");
+      }
+}
+else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 1)
+{ // touch start
+      median.clear();
+      //printf("started\n");
+      started = 1;
+}
 
+else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 0)
+{// touch end
+      //printf("touch end\n");
+      started = 0;
+      int32 sample_cnt = (int32)median.size();
+      if (sample_cnt)
+      {
+            touches_c median_val = { 0,0,0 },
+                  adjusted_val = { 0,0,0 };
+            for (int32 n = 0; n < sample_cnt; n++)
+            {
+                  median_val.x += median[n].x;
+                  median_val.y += median[n].y;
+                  median_val.p += median[n].p;
+            }
+            median_val.x /= sample_cnt;
+            median_val.y /= sample_cnt;
+            median_val.p /= sample_cnt;
+            adjusted_val.x = (int)(((float)median_val.x - kminx) / kx);
+            adjusted_val.y = (int)(((float)median_val.y - kminy) / ky);
+
+            m.lock();
+            //printf("Touch Finished\n");
+            touches.push_back({ median_val,adjusted_val });
+            m.unlock();
+      }
+
+
+}
+else if (ev[i].type == EV_ABS && ev[i].code == 0 && ev[i].value > 0) {
+      //printf("\tY: %d\n", ev[i].value);
+      //*y = (int)((float)ev[i].value * ky);
+     //y = (int)((float)ev[i].value * ky);
+
+}
+else if (ev[i].type == EV_ABS && ev[i].code == 1 && ev[i].value > 0) {
+      //printf("\tX: %d\n", ev[i].value);
+      //*x = (int)((float)ev[i].value * kx);
+      //*x = ev[i].value * kx;
+      //x = (int)((float)ev[i].value * kx);
+      x = ev[i].value;
+}
+else if (ev[i].type == EV_ABS && ev[i].code == 24 && ev[i].value > 0) {
+      //printf("\tP: %d\n", ev[i].value);
+      //p = (int)((float)ev[i].value * kp);
+      p = ev[i].value;
+}
+
+}
+
+*/
+
+
+
+int32 touchscreen::get_devinfo(int32 index, devinfo_s* devinfo)
+{
+      // return:
+      // 0 ok
+      // -1 dev not exists
+      // -2 dev not support ABS
+      // -3 error while get capabilities
+      sprintf(devinfo->devpath, "/dev/input/event%d\0", index);
+      devinfo->fd = open(devinfo->devpath, O_RDONLY);
+      if (devinfo->fd < 0) {
+            return -1;
+      }
+      // get device name
+      ioctl(devinfo->fd, EVIOCGNAME(sizeof(devinfo->devname)), devinfo->devname);
+
+      // get device capabilites
+      memset(devinfo->bit, 0, sizeof(devinfo->bit));
+      ioctl(devinfo->fd, EVIOCGBIT(0, EV_MAX), devinfo->bit[0]);
+      if (!test_bit(EV_ABS, devinfo->bit[0]))
+      {
+            close(devinfo->fd);
+            return -2;
+      }
+
+      // get capabilites of ABS-subsystem
+      ioctl(devinfo->fd, EVIOCGBIT(EV_ABS, KEY_MAX), devinfo->bit[1]);
+      //int32 bitlist[3] = { ABS_X,ABS_Y,ABS_PRESSURE };
+      std::map<int, int>::iterator it = evmap.begin();
+      for (int c = 0; c < max_axes; c++)
+      {
+            if (test_bit(it->first, devinfo->bit[1]))
+            {
+                  if (ioctl(devinfo->fd, EVIOCGABS(it->first), devinfo->abs[c]))
+                  {
+                        close(devinfo->fd);
+                        return -3;
+                  }
+            }
+            it++;
+      }
+      return 0;
+}
+
+touchscreen::touchscreen(CSimpleIniA* ini, int32 w, int32 h)
+{
+      int32 dev_search = 0;
+      int32 devindex = (int32)ini->GetLongValue("touch", "device", -1);
+      max_axes = (int32)ini->GetLongValue("touch", "axes", 2);
+      if (devindex == -1) // autodetect
+            dev_search = 1;
+      else if (get_devinfo(devindex, &di) != 0) // dev not exists or not supported
+            dev_search = 1;
+
+      if (dev_search)
+      { // specified device not exists or autodetect selected
+            dev_search = 0;
+            devindex = 0;
+            while (true) {
+                  int r = get_devinfo(devindex, &di);
+                  if (r == -1)
+                        break;
+                  else if (r == 0)
+                  {
+                        dev_search = 1;
+                        break;
+                  }
+                  devindex++;
+            }
+      }
+
+      if (dev_search == 0)
+      {
+            printf("Cannot find device with ABS capabilities");
+            return;
+      }
+      printf("Touch device: %s\n", di.devname);
+
+
+      // check INI file for coordinates corrections
+      int32 delta,
+            bounds[3] = { w,h,100 };
+      char key[256];
+      for (int c = 0; c < max_axes; c++)
+      {
+
+            // float minval[3], zoom[3];            int invert[3];
+            sprintf(key, "invert%d\0", c);
+            invert[c] = ini->GetLongValue("touch", key, 0);
+
+            sprintf(key, "minval%d\0", c);
+            min_correction[c] = ini->GetDoubleValue("touch", key, 0.0f);
+            minval[c] = (float)di.abs[c][1];
+            maxval[c] = (float)di.abs[c][2];
+            sprintf(key, "zoom%d\0", c);
+            if (ini->KeyExists("touch", key))
+                  zoom[c] = ini->GetDoubleValue("touch", key, 1.0f);
+            else
+            {
+                  delta = di.abs[c][2] - di.abs[c][1];
+                  if (delta == 0) {
+                        printf("error while get device ABS bounds with index %d\n", c);
+                        return;
+                  }
+                  zoom[c] = (float)bounds[c] / (float)delta;
+                  //            kx = (float)w / (float)delta;
+      //                        kp = 100.0f / (float)delta;
+            }
+      }
       t = new std::thread([this]() {t_func(); });
 }
 touchscreen::~touchscreen()
@@ -152,29 +338,28 @@ touchscreen::~touchscreen()
       }
 }
 void touchscreen::simulate_click(int32 x, int32 y) {
-      touches_c median_val = { 0,0,0 },
-            adjusted_val = { x,y,255 };
+      touches_coords_s tc = { { 0,0,0 },  { x,y,255 } };
+      //touches_c median_val = ;
       m.lock();
-      touches.push_back({ median_val,adjusted_val });
+      touches.push_back(tc);
       m.unlock();
 }
+/*
 int touchscreen::get_details(int w, int h)
 {
-      //uint32 types[EV_MAX];
       unsigned long bit[2][NBITS(KEY_MAX)];
       int abs[6] = { 0 };
-      //int coords[4];
 
       // get device name
       ioctl(fd, EVIOCGNAME(sizeof(devname)), devname);
-      printf("Device: %s\n", devname);
+      printf("Touch device: %s\n", devname);
 
       // get device capabilites
       memset(bit, 0, sizeof(bit));
       ioctl(fd, EVIOCGBIT(0, EV_MAX), bit[0]);
       if (!test_bit(EV_ABS, bit[0]))
       {
-            printf("device not support EV_ABS\n");
+            printf("Touch device not support EV_ABS\n");
             return 1;
       }
 
@@ -185,14 +370,16 @@ int touchscreen::get_details(int w, int h)
       if (test_bit(0, bit[1]))
       { // has X abs
             ioctl(fd, EVIOCGABS(0), abs);
-            d = abs[2] - abs[1];
+            kminx = abs[1];
+            d = abs[2] - kminx;
             if (d == 0) { printf("error while get device ABS X bounds\n"); return 1; }
             kx = (float)w / (float)d;
       }
       if (test_bit(1, bit[1]))
       { // has Y abs
             ioctl(fd, EVIOCGABS(1), abs);
-            d = abs[2] - abs[1];
+            kminy = abs[1];
+            d = abs[2] - kminy;
             if (d == 0) { printf("error while get device ABS Y bounds\n"); return 1; }
             ky = (float)h / (float)d;
       }
@@ -205,7 +392,7 @@ int touchscreen::get_details(int w, int h)
       }
       return 0;
 }
-
+*/
 /////////////////////////////////////
 
 touch_manager::touch_manager() {
@@ -217,7 +404,7 @@ touch_manager::~touch_manager()
 void touch_manager::sort_by_priority() {
       struct prio_key
       {
-            inline bool operator() (const touch_group & struct1, const touch_group & struct2)
+            inline bool operator() (const touch_group& struct1, const touch_group& struct2)
             {
                   return (struct1.priority > struct2.priority);
             }
@@ -226,7 +413,7 @@ void touch_manager::sort_by_priority() {
 
 }
 
-touch_group * touch_manager::get_group(int group_id) {
+touch_group* touch_manager::get_group(int group_id) {
       for (size_t n = 0; n < groups.size(); n++)
             //for (touch_group group : groups)
             if (groups[n].id == group_id)
@@ -235,7 +422,7 @@ touch_group * touch_manager::get_group(int group_id) {
       return nullptr;
 }
 int32 touch_manager::set_group_active(int32 group_id, int32 active) {
-      touch_group * group = get_group(group_id);
+      touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
       group->active = active;
       return 0;
@@ -251,14 +438,14 @@ int touch_manager::add_group(int32 group_id, int32 priority, int32 active) {
       return 0;
 }
 int touch_manager::clear_group(int32 group_id) {
-      touch_group * group = get_group(group_id);
+      touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
       group->areas.clear();
       return 0;
 }
 int touch_manager::add_rect(int32 group_id, std::string shapename, IntRect rct)
 {
-      touch_group * group = get_group(group_id);
+      touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
       touch_coords figure;
       figure.type = TOUCH_TYPE_RECT;
@@ -271,7 +458,7 @@ int touch_manager::add_rect(int32 group_id, std::string shapename, IntRect rct)
       return 0;
 }
 int touch_manager::add_point(int32 group_id, std::string shapename, IntCircle circle) {
-      touch_group * group = get_group(group_id);
+      touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
       touch_coords figure;
       figure.type = TOUCH_TYPE_CIRCLE;
@@ -282,13 +469,18 @@ int touch_manager::add_point(int32 group_id, std::string shapename, IntCircle ci
       group->areas.push_back(figure);
       return 0;
 }
+int touch_manager::add_point(int32 group_id, std::string shapename, IntPoint center, int32 radius)
+{
+      return add_point(group_id, shapename, { center.x,center.y,radius });
+
+}
 void touch_manager::dump()
 {
       printf("touch_manager::dump()\n-----------------------------------\n");
       for (const touch_group group : groups)
       {
             printf("Group #%d (prio: %d, active: %d, count: %d)\n",
-                   group.id, group.priority, group.active, group.areas.size());
+                  group.id, group.priority, group.active, group.areas.size());
             for (touch_coords tmp : group.areas)
                   switch (tmp.type) {
                         case TOUCH_TYPE_RECT: {
@@ -303,7 +495,7 @@ void touch_manager::dump()
                   }
       }
 }
-int touch_manager::check_point(const int32 x, const int32 y, int32 & group_id, std::string & shapename) {
+int touch_manager::check_point(const int32 x, const int32 y, int32& group_id, std::string& shapename) {
       for (const touch_group group : groups)
             if (group.active)
                   for (touch_coords tmp : group.areas) {
@@ -315,9 +507,8 @@ int touch_manager::check_point(const int32 x, const int32 y, int32 & group_id, s
                   }
       return 0;
 }
-
 #ifndef NDEBUG
-void touch_manager::debug(video_driver * scr) {
+void touch_manager::debug(video_driver* scr) {
 
       ARGB clr;
       for (const touch_group group : groups)
