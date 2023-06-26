@@ -10,3 +10,5 @@
 - calculate heading from 2 last GPS positions
 - remove trailing zeroes from range numbers
 - show own position in deg/min/sec
++ make NMEA_LIST a fifo instead of vector
+- check video_driver::circle for exceeds Y-axis

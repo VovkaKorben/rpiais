@@ -448,9 +448,9 @@ int _vdm(StringArrayBulk * data)
 
 
       }
-      if (!v->size_ok) {
-            v->size_ok = (size_collect == 0x0F);
-            if (v->size_ok)
+      if (!v->size_ok) { // check size already set
+            v->size_ok = (size_collect == 0x0F); // if not set - look at collected values
+            if (v->size_ok) // if collected values is OK - update vessel bounds
                   v->size_changed();
       }
       v->pos_ok = (pos_collect == 0x03);

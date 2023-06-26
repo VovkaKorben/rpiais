@@ -80,18 +80,21 @@ void touchscreen::t_func()
                                                       started = 1;
                                                 }
                                                 else {// released
+                                                      float f;
                                                       for (int c = 0; c < max_axes; c++)
                                                       {
                                                             if (collect[c].size())
                                                                   touches_coords.raw[c] = std::accumulate(collect[c].begin(), collect[c].end(), 0) / (int32)collect[c].size();
 
                                                             // convert raw to adjusted
-                                                            touches_coords.adjusted[c] = touches_coords.raw[c];
+                                                            f =(float) touches_coords.raw[c];
+                                                            //touches_coords.adjusted[c] = touches_coords.raw[c];
                                                             if (invert[c])
-                                                                  touches_coords.adjusted[c] = (maxval[c] - minval[c]) - touches_coords.adjusted[c];
+                                                                  f =(maxval[c] - minval[c]) - f;
                                                           
-                                                            touches_coords.adjusted[c] -= min_correction[c];
-                                                            touches_coords.adjusted[c] *= zoom[c];
+                                                            f -= min_correction[c];
+                                                            f *= zoom[c];
+                                                            touches_coords.adjusted[c] = (int32)f;
                                                             
 
                                                       }
@@ -149,74 +152,6 @@ void touchscreen::t_func()
             usleep(50000);
       }
 }
-/*
-if (ev[i].type == EV_SYN)
-{ // event sync
-      if (started)
-      {
-            median.push_back({ x, y, p });
-            //printf("push_back\n");
-      }
-}
-else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 1)
-{ // touch start
-      median.clear();
-      //printf("started\n");
-      started = 1;
-}
-
-else if (ev[i].type == EV_KEY && ev[i].code == 330 && ev[i].value == 0)
-{// touch end
-      //printf("touch end\n");
-      started = 0;
-      int32 sample_cnt = (int32)median.size();
-      if (sample_cnt)
-      {
-            touches_c median_val = { 0,0,0 },
-                  adjusted_val = { 0,0,0 };
-            for (int32 n = 0; n < sample_cnt; n++)
-            {
-                  median_val.x += median[n].x;
-                  median_val.y += median[n].y;
-                  median_val.p += median[n].p;
-            }
-            median_val.x /= sample_cnt;
-            median_val.y /= sample_cnt;
-            median_val.p /= sample_cnt;
-            adjusted_val.x = (int)(((float)median_val.x - kminx) / kx);
-            adjusted_val.y = (int)(((float)median_val.y - kminy) / ky);
-
-            m.lock();
-            //printf("Touch Finished\n");
-            touches.push_back({ median_val,adjusted_val });
-            m.unlock();
-      }
-
-
-}
-else if (ev[i].type == EV_ABS && ev[i].code == 0 && ev[i].value > 0) {
-      //printf("\tY: %d\n", ev[i].value);
-      //*y = (int)((float)ev[i].value * ky);
-     //y = (int)((float)ev[i].value * ky);
-
-}
-else if (ev[i].type == EV_ABS && ev[i].code == 1 && ev[i].value > 0) {
-      //printf("\tX: %d\n", ev[i].value);
-      //*x = (int)((float)ev[i].value * kx);
-      //*x = ev[i].value * kx;
-      //x = (int)((float)ev[i].value * kx);
-      x = ev[i].value;
-}
-else if (ev[i].type == EV_ABS && ev[i].code == 24 && ev[i].value > 0) {
-      //printf("\tP: %d\n", ev[i].value);
-      //p = (int)((float)ev[i].value * kp);
-      p = ev[i].value;
-}
-
-}
-
-*/
-
 
 
 int32 touchscreen::get_devinfo(int32 index, devinfo_s* devinfo)
@@ -306,15 +241,15 @@ touchscreen::touchscreen(CSimpleIniA* ini, int32 w, int32 h)
 
             // float minval[3], zoom[3];            int invert[3];
             sprintf(key, "invert%d\0", c);
-            invert[c] = ini->GetLongValue("touch", key, 0);
+            invert[c] =(int32) ini->GetLongValue("touch", key, 0);
 
             sprintf(key, "minval%d\0", c);
-            min_correction[c] = ini->GetDoubleValue("touch", key, 0.0f);
+            min_correction[c] = (float)ini->GetDoubleValue("touch", key, 0.0);
             minval[c] = (float)di.abs[c][1];
             maxval[c] = (float)di.abs[c][2];
             sprintf(key, "zoom%d\0", c);
             if (ini->KeyExists("touch", key))
-                  zoom[c] = ini->GetDoubleValue("touch", key, 1.0f);
+                  zoom[c] = (float)ini->GetDoubleValue("touch", key, 1.0);
             else
             {
                   delta = di.abs[c][2] - di.abs[c][1];

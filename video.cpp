@@ -312,6 +312,7 @@ void video_driver::fill_rect(IntRect rct, const ARGB color) {
 void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 { //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
+      printf("draw_line_fast s: %d, e: %d, y: %d\n", xs, xe, y);
       if (xe < 0 || xs >= _width) return;
 
       // clip start & end to window bounds

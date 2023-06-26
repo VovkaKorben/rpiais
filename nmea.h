@@ -58,15 +58,6 @@ extern std::map<std::string, image> mid_country;
 #define NMEA_UNKNOWN_SENTENCE -1
 
 
-//#define LAT_DEFAULT 0x3412140 #define LON_DEFAULT 0x6791AC0 
-
-
-
-
-
-
-
-
 
 
 

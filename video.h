@@ -15,6 +15,8 @@ const ARGB clNone = 0xFFFFFFFF;
 const ARGB clLtGray = 0xC0C0C0;
 const ARGB clGray = 0x808080;
 const ARGB clRed = 0xFF0000;
+const ARGB clBlue = 0x0000FF;
+
 const ARGB clTransparency25 = 0x40000000;
 const ARGB clTransparency50 = 0x80000000;
 const ARGB clTransparency75 = 0xC0000000;

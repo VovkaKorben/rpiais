@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include "nmeastreams.h"
 #include <SimpleIni.h>
-
+#include <queue>
 #if map_show==1
 const uint64 SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
 const uint64 SHAPES_UPDATE_FIRST = 3 * 1000;  // 3 sec for startup updates
@@ -44,7 +44,7 @@ mysql_driver* mysql;
 touchscreen* touchscr;
 touch_manager* touchman;
 nmea_reciever* nmea_recv;
-StringArray  nmea_list;
+StringQueue  nmea_list;
 
 
 
@@ -54,14 +54,23 @@ int zoom_index = 4;
 double  zoom;
 int init_sock(CSimpleIniA* ini)
 {
-      nmea_recv = new nmea_reciever(ini,&nmea_list);
+      nmea_recv = new nmea_reciever(ini, &nmea_list);
       return 0;
 }
 int  update_nmea()
 {
-
-
-      return 0;
+      std::string nmea_str;
+      int32 c = 0;
+      while (!nmea_list.empty())
+      {
+            nmea_str = nmea_list.front();
+            nmea_list.pop();
+            //nmea_list.erase(nmea_list.begin());
+            parse_nmea(nmea_str);
+            c++;
+      }
+      //if (c) printf("nmea parsed: %d\n", c);
+      return c;
 }
 /*int update_nmea(int msg_id) {
       int nmea_result;
@@ -451,8 +460,12 @@ void draw_infoline()
       screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY + SPACEY, std::string(buf), VALIGN_BOTTOM | HALIGN_RIGHT, clBlack, clLand, true);
       std::strftime(buf, sizeof(buf), "%a,%e %b", std::localtime(&now));
       screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY - SPACEY, std::string(buf), VALIGN_TOP | HALIGN_RIGHT, clBlack, clLand, true);
-
-      screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY + SPACEY, "\x81 45.343423, 35.12356234", VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clLand, true);
+      FloatPoint gps = own_vessel.get_gps();
+      screen->draw_text(FONT_MONOMEDIUM,
+            PIVOTX + SPACEX, PIVOTY + SPACEY,
+            string_format("\x81 %.6f %.6f", gps.x, gps.y),
+            VALIGN_BOTTOM | HALIGN_LEFT,
+            clBlack, clLand, true);
       screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY - SPACEY, "\x80 5/12", VALIGN_TOP | HALIGN_LEFT, clBlack, clLand, true);
 
 }
@@ -515,7 +528,7 @@ void draw_vessels_info() {
             }
             else
             { // no mid info found, just out mid code
-                  screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[0], y_coord, string_format("%d", mid), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                  screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[0], y_coord - 1, string_format("%d", mid), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
             }
             /*
                       struct mid_struct_s
@@ -527,8 +540,8 @@ void draw_vessels_info() {
                       extern std::map<std::string, image> mid_country;
                       */
 
-            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[1], y_coord - 1, string_format("%d", mmsi[i]), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[2], y_coord - 1, vessels[mmsi[i]].shipname, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[1], y_coord - 1, string_format("%d", mmsi[i]), VALIGN_TOP | HALIGN_LEFT, clRed, clNone);
+            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[2], y_coord - 1, vessels[mmsi[i]].shipname, VALIGN_TOP | HALIGN_LEFT, clBlue, clNone);
             screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.right() + headers[3], y_coord - 1, string_format("%d", vessels[mmsi[i]].distance), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
             y_coord -= LINE_HEIGHT;
       }
@@ -603,7 +616,6 @@ void draw_frame()
 
       draw_infowindow();
 }
-
 ////////////////////////////////////////////////////////////
 void process_touches() {
 
@@ -750,7 +762,6 @@ void video_loop_start() {
         }*/
 }
 ////////////////////////////////////////////////////////////
-
 void init_video(const char* buff) {
       screen = new video_driver(buff, 0); // debug purpose = 1 buffer, production value = 5
       if (screen->get_last_error())

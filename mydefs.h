@@ -16,7 +16,7 @@
 #include  <algorithm>
 #include  <cstring>
 #include <sys/stat.h>
-
+#include <queue>
 #define PI 3.141592653589793238462643383279
 #define PI180 PI/180.0
 #define RAD 180/PI
@@ -111,6 +111,7 @@ inline int imax(int v1, int v2)
 
 
 //using namespace std;
+typedef std::queue<std::string> StringQueue;
 typedef std::vector<std::string> StringArray;
 typedef std::vector<std::string>* PStringArray;
 typedef std::vector<StringArray> StringArrayBulk;
@@ -404,7 +405,7 @@ inline int32 length_chararray(pchar str)
       return result;
 
 }
-inline int32 length_constchararray(const char * str)
+inline int32 length_constchararray(const char* str)
 {
       int32 result = 0;
       while (str[result])
@@ -424,13 +425,12 @@ inline void lowercase_chararray(pchar v, int32 length)
       }
 
 }
-inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start = 0)
-{
+inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start = 0){
       int32 needle_len = length_chararray(needle);
       end -= needle_len;
 
       int32  found_count, c;
-      while (start < end)
+      while (start <= end)
       {
             found_count = 0;
             for (c = 0; c < needle_len; c++)
@@ -445,6 +445,17 @@ inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start =
       return -1;
 }
 
-
+inline void copy_chararray(pchar src, pchar dst, int32  start, int32 cnt){
+      pchar t_src = src, t_dst = dst;
+      
+      t_src += start;
+      while (cnt--)
+      {
+            *t_dst = *t_src;
+            t_dst++;
+            t_src++;
+      }
+      *t_dst = 0;
+}
 
 #endif
