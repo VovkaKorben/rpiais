@@ -1,3 +1,4 @@
+- disable f***ing tty cursor 
 - take a look for long ship names in info_box
 + optimize drawmap->drawpoly->draw_outline, to not draw hidden ribs
 - add in-font icon for pos and satellites
@@ -11,4 +12,9 @@
 - remove trailing zeroes from range numbers
 - show own position in deg/min/sec
 + make NMEA_LIST a fifo instead of vector
-- check video_driver::circle for exceeds Y-axis
++ check video_driver::circle for exceeds Y-axis (make cicrcle cache)
+- check for `socket disconnected`
+
+- добавить TouchZone для списка кораблей
+- добавить инфо окно для просмотра инфы о корабле по клику
+- запустить один кораблик и посмотреть что происходит с углом

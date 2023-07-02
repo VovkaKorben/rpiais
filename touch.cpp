@@ -87,15 +87,15 @@ void touchscreen::t_func()
                                                                   touches_coords.raw[c] = std::accumulate(collect[c].begin(), collect[c].end(), 0) / (int32)collect[c].size();
 
                                                             // convert raw to adjusted
-                                                            f =(float) touches_coords.raw[c];
+                                                            f = (float)touches_coords.raw[c];
                                                             //touches_coords.adjusted[c] = touches_coords.raw[c];
                                                             if (invert[c])
-                                                                  f =(maxval[c] - minval[c]) - f;
-                                                          
+                                                                  f = (maxval[c] - minval[c]) - f;
+
                                                             f -= min_correction[c];
                                                             f *= zoom[c];
                                                             touches_coords.adjusted[c] = (int32)f;
-                                                            
+
 
                                                       }
 
@@ -241,7 +241,7 @@ touchscreen::touchscreen(CSimpleIniA* ini, int32 w, int32 h)
 
             // float minval[3], zoom[3];            int invert[3];
             sprintf(key, "invert%d\0", c);
-            invert[c] =(int32) ini->GetLongValue("touch", key, 0);
+            invert[c] = (int32)ini->GetLongValue("touch", key, 0);
 
             sprintf(key, "minval%d\0", c);
             min_correction[c] = (float)ini->GetDoubleValue("touch", key, 0.0);
@@ -378,7 +378,7 @@ int touch_manager::clear_group(int32 group_id) {
       group->areas.clear();
       return 0;
 }
-int touch_manager::add_rect(int32 group_id, std::string shapename, IntRect rct)
+int touch_manager::add_rect(int32 group_id, int32 area_id, IntRect rct)
 {
       touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
@@ -388,11 +388,11 @@ int touch_manager::add_rect(int32 group_id, std::string shapename, IntRect rct)
       figure.coords[1] = rct.bottom();
       figure.coords[2] = rct.right();
       figure.coords[3] = rct.top();
-      figure.name = shapename;
+      figure.id = area_id;
       group->areas.push_back(figure);
       return 0;
 }
-int touch_manager::add_point(int32 group_id, std::string shapename, IntCircle circle) {
+int touch_manager::add_circle(int32 group_id, int32 area_id, IntCircle circle) {
       touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
       touch_coords figure;
@@ -400,13 +400,13 @@ int touch_manager::add_point(int32 group_id, std::string shapename, IntCircle ci
       figure.coords[0] = circle.x;
       figure.coords[1] = circle.y;
       figure.coords[2] = circle.r;
-      figure.name = shapename;
+      figure.id = area_id;
       group->areas.push_back(figure);
       return 0;
 }
-int touch_manager::add_point(int32 group_id, std::string shapename, IntPoint center, int32 radius)
+int touch_manager::add_circle(int32 group_id, int32 area_id, IntPoint center, uint32 radius)
 {
-      return add_point(group_id, shapename, { center.x,center.y,radius });
+      return add_circle(group_id, area_id, { center.x,center.y,radius });
 
 }
 void touch_manager::dump()
@@ -419,10 +419,10 @@ void touch_manager::dump()
             for (touch_coords tmp : group.areas)
                   switch (tmp.type) {
                         case TOUCH_TYPE_RECT: {
-                              printf("\t%s:rect %d,%d,%d,%d\n", tmp.name.c_str(), tmp.coords[0], tmp.coords[1], tmp.coords[2], tmp.coords[3]); break;
+                              printf("\t%d:rect %d,%d,%d,%d\n", tmp.id, tmp.coords[0], tmp.coords[1], tmp.coords[2], tmp.coords[3]); break;
                         }
                         case TOUCH_TYPE_CIRCLE: {
-                              printf("\t%s:circle %d,%d,%d\n", tmp.name.c_str(), tmp.coords[0], tmp.coords[1], tmp.coords[2]); break;
+                              printf("\t%d:circle %d,%d,%d\n", tmp.id, tmp.coords[0], tmp.coords[1], tmp.coords[2]); break;
                         }
                         default: {
                               printf("\tUnknown type: %d\n", tmp.type); break;
@@ -430,13 +430,13 @@ void touch_manager::dump()
                   }
       }
 }
-int touch_manager::check_point(const int32 x, const int32 y, int32& group_id, std::string& shapename) {
+int touch_manager::check_point(const int32 x, const int32 y, int32& group_id, int32& area_id) {
       for (const touch_group group : groups)
             if (group.active)
                   for (touch_coords tmp : group.areas) {
                         if (tmp.check_pt(x, y)) {
                               group_id = group.id;
-                              shapename = tmp.name;
+                              area_id = tmp.id;
                               return 1;
                         }
                   }
@@ -457,7 +457,7 @@ void touch_manager::debug(video_driver* scr) {
                               break;
                         }
                         case TOUCH_TYPE_CIRCLE: {
-                              scr->circle({ tmp.coords[0], tmp.coords[1], tmp.coords[2] }, clr, clNone);
+                              scr->circle({ tmp.coords[0], tmp.coords[1],(uint32)tmp.coords[2] }, clr, clNone);
                               break;
                         }
                   }

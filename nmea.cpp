@@ -223,7 +223,7 @@ int _rmc(StringArrayBulk * data)
                               lat = -lat;
                         if (lon_dir == 'W')
                               lon = -lon;
-
+                       // own_vessel.set_pos
                   }
                   return 0;
             }
@@ -448,14 +448,17 @@ int _vdm(StringArrayBulk * data)
 
 
       }
+      
       if (!v->size_ok) { // check size already set
             v->size_ok = (size_collect == 0x0F); // if not set - look at collected values
             if (v->size_ok) // if collected values is OK - update vessel bounds
                   v->size_changed();
       }
-      v->pos_ok = (pos_collect == 0x03);
-      if (v->pos_ok)
+      
+      if (!v->pos_ok)
       {
+            v->pos_ok = (pos_collect == 0x03);
+            printf("mmsi: %d, pos not ok\n", mmsi);
             //v->meters = { v->lon,v->lat };
             //v->meters.latlon2meter();
       }

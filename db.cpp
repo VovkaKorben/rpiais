@@ -301,7 +301,7 @@ int init_db(mysql_driver* driver)
             own_vessel.set_pos({
                   driver->get_myfloat("lon"),
                   driver->get_myfloat("lat")
-                  }, 0);
+                  }, position_type_e::previous);
       }
       driver->has_next();
 

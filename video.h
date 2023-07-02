@@ -6,6 +6,7 @@
 #include "ais_types.h"
 #include <linux/fb.h>
 #include <map>
+#include <vector>
 
 const ARGB clSea = 0x0097c2;
 const ARGB clLand = 0xb7b074;
@@ -75,10 +76,12 @@ struct bucketset {
 class video_driver
 {
 private:
+      //std::map <uint32, std::vector<uint32>> circle_cache;
+
       int32 last_error,
             fbdev, // fb handle
             current_fb, buffer_count,
-           // pixel_count, // = width * height
+            // pixel_count, // = width * height
             screen_size, // = pixel_count * byte_per_pix, 
             _width, _height;
 
@@ -119,6 +122,7 @@ public:
       //void draw_text(int font_index, int x, int y, std::string s, int flags);
       void draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap, bool dbg = false);
       void draw_image(image* img, int x, int y, int flags, int transparency = 255); // 255 mean full visible, 0 mean none visible
+      void _make_circle_cache(const uint32 radius);
       void circle(const IntCircle circle, const ARGB outline, const ARGB fill);
 };
 

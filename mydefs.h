@@ -44,6 +44,10 @@ typedef unsigned long long uint64;
 
 typedef unsigned int ARGB;
 
+#define nline void pstr(std::string)
+#define PRINT_STRING(message) printf("%s",message.c_str())
+
+
 
 #ifdef __clang__ //clang_compiler
 #elif __GNUC__ //GNU_C_compiler
@@ -267,7 +271,8 @@ struct  FloatPoint
 };
 struct IntCircle
 {
-      int32 x, y, r;
+      int32 x, y;
+      uint32 r;
 };
 struct IntRect {
 private:
@@ -359,6 +364,8 @@ template<typename ... Args> inline std::string string_format(const std::string& 
       std::snprintf(buf.get(), size, format.c_str(), args ...);
       return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
 }
+
+
 inline std::string read_file(std::string filename) {
       std::ifstream f(filename); //taking file as inputstream
       std::string str;
@@ -425,7 +432,7 @@ inline void lowercase_chararray(pchar v, int32 length)
       }
 
 }
-inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start = 0){
+inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start = 0) {
       int32 needle_len = length_chararray(needle);
       end -= needle_len;
 
@@ -445,9 +452,9 @@ inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start =
       return -1;
 }
 
-inline void copy_chararray(pchar src, pchar dst, int32  start, int32 cnt){
+inline void copy_chararray(pchar src, pchar dst, int32  start, int32 cnt) {
       pchar t_src = src, t_dst = dst;
-      
+
       t_src += start;
       while (cnt--)
       {

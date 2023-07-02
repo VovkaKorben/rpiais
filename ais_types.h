@@ -9,13 +9,13 @@
 struct poly {
 
       int points_count;
-      FloatPoint * origin;
-      IntPoint * work;
+      FloatPoint* origin;
+      IntPoint* work;
       uint64_t last_access;
 
       int path_count;
       frect bounds;
-      int * pathindex;
+      int* pathindex;
 
       poly()
       {
@@ -96,16 +96,23 @@ public:
             origin[4] = { (t + b) * 0.75 - b,-r };// bow right connector
       }
 };
+
+enum class position_type_e
+{
+      unknown = 0, previous, glonass, gps, POS_MAX
+};
+
 struct own_vessel_class
 {
 private:
       // gps 2
       // glonass 1
       // prev pos 0
-      int pos_count;
+      //int pos_count;
       std::vector<FloatPoint> pos_arr;
 
-      int pos_priority, heading;
+      position_type_e pos_priority;
+      int32 heading;
       bool heading_set, relative;
       FloatPoint gps, meters;
 
@@ -113,21 +120,17 @@ public:
       /////////////////////////////////////////////////////////////////////////
       inline FloatPoint get_gps()
       {
-            return pos_arr[pos_priority];
+            return pos_arr[(int)pos_priority];
       };
       inline FloatPoint get_meters()
       {
             return meters;
       };
-      bool pos_ok()
+      //bool pos_ok()      {            return pos_priority >= 0;      };
+      void set_pos(FloatPoint position_gps, position_type_e priority)
       {
-            return pos_priority >= 0;
-      };
-      void set_pos(FloatPoint position_gps, int priority)
-      {
-            if (priority < 0 || priority >= pos_count)
-                  throw "own_vessel_class: priority index error";
-            pos_arr[priority] = position_gps;
+            //if (priority < 0 || priority >= pos_count)                  throw "own_vessel_class: priority index error";
+            pos_arr[(int)priority] = position_gps;
 
             if (priority >= pos_priority) {
                   pos_priority = priority;
@@ -153,9 +156,8 @@ public:
       /////////////////////////////////////////////////////////////////////////
       own_vessel_class()
       {
-            pos_count = 3;
-            pos_arr.resize(pos_count);
-            pos_priority = -1;
+            pos_arr.resize((int)position_type_e::POS_MAX);
+            pos_priority = position_type_e::unknown;
 
             heading_set = false;
             relative = false;

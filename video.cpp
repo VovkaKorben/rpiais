@@ -28,6 +28,9 @@
 #define FB_PAN_DISPLAY_FAILED 6;
 #define FB_INVALID_BUFFER_ADDRESS 7;
 #define FB_BUFFER_COUNT_ERROR 8;
+#define FB_SET_KDSETMODE_FAILED 9;
+
+
 
 
 int32 CENTER_X, CENTER_Y;
@@ -185,7 +188,11 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
 
       // init fill 
       et = new bucketset[_height];
-
+      if (ioctl(fbdev, KDSETMODE, KD_GRAPHICS)) {
+            perror("ioctl");
+            last_error = FB_SET_KDSETMODE_FAILED;
+            //return;
+      }
       last_error = FB_NO_ERROR;
 }
 video_driver::~video_driver() {
@@ -193,6 +200,10 @@ video_driver::~video_driver() {
       if (!buffer_count)
             free(pix_buf);
       munmap(fb_start, screen_size * buffer_count);
+      if (ioctl(fbdev, KDSETMODE, KD_TEXT)) {
+            last_error = FB_SET_KDSETMODE_FAILED;
+            return;
+      }
       close(fbdev);
 
 }
@@ -312,8 +323,9 @@ void video_driver::fill_rect(IntRect rct, const ARGB color) {
 void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 { //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
-      printf("draw_line_fast s: %d, e: %d, y: %d\n", xs, xe, y);
+      //printf("draw_line_fast s: %d, e: %d, y: %d\n", xs, xe, y);
       if (xe < 0 || xs >= _width) return;
+      if (y < 0 || y >= _height) return;
 
       // clip start & end to window bounds
       if (xs < 0) xs = 0;
@@ -332,7 +344,7 @@ void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 #endif
 }
 
-void video_driver::draw_image(image* img, int x, int y, int flags, int transparency)
+void video_driver::draw_image(image* img, int32 x, int32 y, int flags, int transparency)
 {
       if (!img->is_loaded()) return;
       if (transparency == 0) return; // nothing draw with zero transparency
@@ -374,14 +386,22 @@ void video_driver::draw_image(image* img, int x, int y, int flags, int transpare
 
 
                   dst_current++;
-            }
-            dst_start += vinfo.xres_virtual; // proceed to next line
       }
+            dst_start += vinfo.xres_virtual; // proceed to next line
+}
       //   WARN_RESTORE            WARN_RESTORE
 
 }
+
+/*void video_driver::_make_circle_cache(const uint32 radius)
+{
+      std::vector<uint32> tmp(radius);
+
+}*/
+
 void video_driver::circle(const IntCircle circle, const ARGB outline, const ARGB fill)
 {
+
       if (fill != clNone) {
             int f = 1 - circle.r;
             int ddF_x = 0;
@@ -417,11 +437,13 @@ void video_driver::circle(const IntCircle circle, const ARGB outline, const ARGB
             }
       }
       if (outline != clNone) {
+
             int f = 1 - circle.r;
             int ddF_x = 0;
             int ddF_y = -2 * circle.r;
             int x = 0;
             int y = circle.r;
+
 
 
             draw_pix(circle.x - x, circle.y + circle.r, outline);
@@ -454,6 +476,7 @@ void video_driver::circle(const IntCircle circle, const ARGB outline, const ARGB
       }
 
 }
+
 
 ////////////////////////////////////////////////////////////
 void _insertionSort(bucketset* b) {

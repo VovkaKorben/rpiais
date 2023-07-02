@@ -65,31 +65,12 @@ int  update_nmea()
       {
             nmea_str = nmea_list.front();
             nmea_list.pop();
-            //nmea_list.erase(nmea_list.begin());
+            //printf("nmea in: %s\n", nmea_str.c_str());
             parse_nmea(nmea_str);
             c++;
       }
-      //if (c) printf("nmea parsed: %d\n", c);
       return c;
 }
-/*int update_nmea(int msg_id) {
-      int nmea_result;
-      mysql->exec_prepared(PREPARED_NMEA, msg_id);
-      mysql->store();
-      int total = 0;
-      while (mysql->fetch())
-      {
-            msg_id = mysql->get_myint("id");
-            nmea_result = parse_nmea(mysql->get_mystr("data"));
-            if (nmea_result)
-                  printf("parse_nmea returns %d\n", nmea_result);
-            total++;
-      }
-      if (total)
-            printf("NMEA processed: %d\n", total);
-
-      return msg_id;
-}*/
 void zoom_changed(int new_zoom_index)
 {
 
@@ -303,7 +284,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
       const vessel* v;
       FloatPoint vessel_center, fp;
       IntPoint int_center;
-      int circle_size = imax((int)(6 * zoom), 3);
+      uint32 circle_size = imax((int)(6 * zoom), 3);
       for (const auto& vx : vessels)
       {
             //printf("lat lon: %.12f,%.12f\n", v.lat, v.lon);
@@ -316,14 +297,21 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 
                   vessel_center = v->gps;
                   vessel_center.latlon2meter();
+
                   vessel_center.offset_remove(own_vessel.get_meters());
                   vessel_center.to_polar();
                   vessel_center.y *= zoom;
                   if (own_vessel.get_relative())
                         vessel_center.x -= own_vessel.get_heading();
                   vessel_center.to_decart();
+
+
+
                   int_center = vessel_center.to_int();
                   int_center.offset_add(CENTER_X, CENTER_Y);
+
+                  //printf("%d %d \n", int_center.x, int_center.y);
+
                   if (v->size_ok && v->angle_ok)
                   {
                         // rotate each point
@@ -428,7 +416,7 @@ void draw_grid(double angle)
       }
       int v;
       std::string s;
-      for (int i = 1; i < 6; i++)
+      for (uint32 i = 1; i < 6; i++)
       {
             // distance circle
             screen->circle({ CENTER_X, CENTER_Y, i * circle_radius }, 0xF0000000, clNone);
@@ -511,9 +499,8 @@ void draw_vessels_info() {
       y_coord -= LINE_HEIGHT;
 
       // draw ship list
-      int lines_count = imin((int)mmsi.size(), y_coord / LINE_HEIGHT),
-
-            mid;
+      touchman->clear_group(TOUCH_GROUP_SHIPLIST);
+      int lines_count = imin((int)mmsi.size(), y_coord / LINE_HEIGHT), mid;
       for (int i = 0; i < lines_count; i++)
       {
             mid = vessels[mmsi[i]].mid;
@@ -543,6 +530,10 @@ void draw_vessels_info() {
             screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[1], y_coord - 1, string_format("%d", mmsi[i]), VALIGN_TOP | HALIGN_LEFT, clRed, clNone);
             screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[2], y_coord - 1, vessels[mmsi[i]].shipname, VALIGN_TOP | HALIGN_LEFT, clBlue, clNone);
             screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.right() + headers[3], y_coord - 1, string_format("%d", vessels[mmsi[i]].distance), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+            touchman->add_rect(
+                  TOUCH_GROUP_SHIPLIST,
+                  mmsi[i],// "ship",//std::string(),
+                  { SHIPLIST_RECT.left(),y_coord - LINE_HEIGHT,SHIPLIST_RECT.right(),y_coord });
             y_coord -= LINE_HEIGHT;
       }
 
@@ -552,6 +543,28 @@ void draw_vessels_info() {
 
 
 }
+
+void draw_infowindow_global()
+{
+      int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
+      screen->draw_text(FONT_MONOMEDIUM, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
+      screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+      screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+      screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+}
+
+void draw_infowindow_vessel()
+{
+      vessel* v = &vessels[show_info_window];
+      if (!v) return;
+      int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
+      screen->draw_text(FONT_MONOMEDIUM, x, y, "VESSEL Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
+      screen->draw_text(FONT_NORMAL, x, y, string_format("MMSI: %d", show_info_window), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+      screen->draw_text(FONT_NORMAL, x, y, string_format("GPS: %.6f,%.6f", v->gps.x, v->gps.y), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+      screen->draw_text(FONT_NORMAL, x, y, string_format("COG: %f", v->course), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+      screen->draw_text(FONT_NORMAL, x, y, string_format("Heading: %f", v->heading), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+}
+
 void draw_infowindow()
 {
       if (!show_info_window)
@@ -560,23 +573,22 @@ void draw_infowindow()
       //const int32 lh = 12;
       screen->fill_rect(WINDOW_RECT, clWhite | clTransparency25);
       screen->rectangle(WINDOW_RECT, clBlack);
-      int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
+
       if (show_info_window < 0)
       {// global info (sattelites etc)
-            screen->draw_text(FONT_MONOMEDIUM, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
-            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
-            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
-            screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+            draw_infowindow_global();
+
       }
       else
       { // ship info
+            draw_infowindow_vessel();
       }
 
 }
 void draw_frame()
 {
 
-
+      /*
       if (!own_vessel.pos_ok())
       {
             // print `no GPS` and exit
@@ -584,6 +596,7 @@ void draw_frame()
             //screen->draw_text(FONT_NORMAL, screen->get_width() / 2, screen->get_height() / 2, "no GPS position", VALIGN_CENTER | HALIGN_CENTER, 0xFFFF00, clWhite);
             return;
       }
+      */
       screen->fill_rect(SCREEN_RECT, clSea);
 
       //screen->draw_text(SPECCY_FONT, screen->get_width() / 2, 25, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
@@ -619,25 +632,25 @@ void draw_frame()
 ////////////////////////////////////////////////////////////
 void process_touches() {
 
-      std::string name;
-      int32 gi;
+      std::string msg;
+      int32 group_id, area_id;
       touches_coords_s t;
       //touchman->check_point(30, 300, gi, name);
       while (touchscr->pop(t))
       {
-            printf("Touch: %d,%d ... ", t.adjusted[0], t.adjusted[1]);
-            if (touchman->check_point(t.adjusted[0], t.adjusted[1], gi, name))
+            PRINT_STRING(string_format("Touch: %d,%d ... ", t.adjusted[0], t.adjusted[1]));
+            if (touchman->check_point(t.adjusted[0], t.adjusted[1], group_id, area_id))
             {
-                  printf("OK\n");
-                  switch (gi)
+                  //PRINT_STRING(                  string_format(printf("OK\n");
+                  switch (group_id)
                   {
                         case TOUCH_GROUP_ZOOM: {
-                              if (!name.compare("zoomin"))
+                              if (area_id == TOUCH_AREA_ZOOMIN)
                               {
 
                                     zoom_changed(zoom_index - 1);
                               }
-                              else if (!name.compare("zoomout"))
+                              else if (area_id == TOUCH_AREA_ZOOMOUT)
                               {
                                     zoom_changed(zoom_index + 1);
                               }
@@ -663,9 +676,18 @@ void process_touches() {
                                     printf("[TOUCH] error set active %d to group %d", 0, TOUCH_GROUP_INFOWINDOW);
                               break;
                         }
+                        case TOUCH_GROUP_SHIPLIST:
+                        {// show vessel info window
+                              show_info_window = area_id;
+                              touchman->set_groups_active(0);                               // deactivate all touch groups,except window group
+                              if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 1))
+                                    printf("[TOUCH] error set active %d to group %d", 1, TOUCH_GROUP_INFOWINDOW);
+                              break;
+                        }
+
                         default:
                         {
-                              printf("Unhandled touch group: %d", gi);
+                              printf("Unhandled touch group: %d\n", group_id);
                               break;
                         }
                   }
@@ -798,13 +820,13 @@ void init_touch(CSimpleIniA* ini) {
       rct.set_top(screen->height() - ZOOM_BTN_MARGIN);
       rct.set_right(rct.left() + img_minus->width());
       rct.set_bottom(rct.top() - img_minus->height());
-      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomout", rct.center(), 40);
+      touchman->add_circle(TOUCH_GROUP_ZOOM, TOUCH_AREA_ZOOMOUT, rct.center(), 40);
 
 
       rct.set_right(SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN);
       rct.set_left(rct.right() - img_plus->width());
       rct.set_bottom(rct.top() - img_plus->height());
-      touchman->add_point(TOUCH_GROUP_ZOOM, "zoomin", rct.center(), 40);
+      touchman->add_circle(TOUCH_GROUP_ZOOM, TOUCH_AREA_ZOOMIN, rct.center(), 40);
 
 
       touchman->add_group(TOUCH_GROUP_SHIPSHAPE, 5);
@@ -812,10 +834,10 @@ void init_touch(CSimpleIniA* ini) {
       //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
 
       touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
-      touchman->add_rect(TOUCH_GROUP_INFOLINE, "info", { SCREEN_RECT.left(),SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
+      touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
 
       touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
-      touchman->add_rect(TOUCH_GROUP_INFOWINDOW, "window", WINDOW_RECT);
+      touchman->add_rect(TOUCH_GROUP_INFOWINDOW, 0, WINDOW_RECT);
 }
 void init_database() {
       mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
@@ -852,6 +874,7 @@ void do_poly_test() {
 }
 int main()
 {
+
       //printf("Started...\n\n");      std::cout << "Started 2..." << std::endl;
       try {
             CSimpleIniA ini;
@@ -868,14 +891,8 @@ int main()
             const char* buff;
             buff = ini.GetValue("main", "video", "/dev/fb0");
             init_video(buff);
-
-
-
-
             init_touch(&ini);
             init_database();
-
-            //do_poly_test();
             init_sock(&ini);
 
             zoom_changed(zoom_index);
@@ -893,7 +910,7 @@ int main()
             return false;
       }
       return 0;
-}
+      }
 
 
 // 60.39705229794781, 5.315458423270774

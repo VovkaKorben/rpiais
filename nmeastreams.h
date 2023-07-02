@@ -17,7 +17,7 @@ struct sockets_s
 {
       //std::atomic_int running;
       int32 running;
-      int32 enabled, sockfd, type;
+      int32 enabled, fd, type;
       uint16 port;
       //std::string ;
       const char* addr, * name;

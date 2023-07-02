@@ -26,6 +26,9 @@
 #define TOUCH_TYPE_RECT 0
 #define TOUCH_TYPE_CIRCLE 1
 
+#define TOUCH_AREA_ZOOMIN 1
+#define TOUCH_AREA_ZOOMOUT 0
+
 #define BITS_PER_LONG (sizeof(long) * 8)
 #define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
 #define OFF(x)  ((x)%BITS_PER_LONG)
@@ -58,8 +61,8 @@ private:
       std::thread* t;
       void t_func();
       std::vector<touches_coords_s> touches;
-      float min_correction[3],minval[3], maxval[3], zoom[3];
-            int invert[3];
+      float min_correction[3], minval[3], maxval[3], zoom[3];
+      int invert[3];
       int32 max_axes;
 public:
       size_t count();
@@ -74,8 +77,7 @@ public:
 /////////////////////////////////////
 struct touch_coords
 {
-      int32 type;
-      std::string name;
+      int32 type, id;
       int32 coords[4];
       int check_pt(int x, int y)
       {
@@ -118,11 +120,11 @@ public:
       void set_groups_active(int32 active);
       int add_group(int32 group_id, int32 priority, int32 active = 1);
       int clear_group(int32 group_id);
-      int add_rect(int32 group_id, std::string shapename, IntRect rct);
-      int add_point(int32 group_id, std::string shapename, IntCircle circle);
-      int add_point(int32 group_id, std::string shapename, IntPoint center, int32 radius);
+      int add_rect(int32 group_id, int32 area_id, IntRect rct);
+      int add_circle(int32 group_id, int32 area_id, IntCircle circle);
+      int add_circle(int32 group_id, int32 area_id, IntPoint center, uint32 radius);
       void dump();
-      int check_point(const int32 x, const int32 y, int32& group_id, std::string& shapename);
+      int check_point(const int32 x, const int32 y, int32& group_id, int32& area_id);
       //int check_point(const int32 x, const int32 y, int32 & group_index, int32 & area_index);
 #ifndef NDEBUG
       void debug(video_driver* screen);
