@@ -20,7 +20,7 @@ struct vdm_field
       std::string field_name;
       int type, def, exp;
 };
-typedef int (*FnPtr)(StringArrayBulk * data);
+typedef int32 (*FnPtr)(StringArrayBulk * data,std::string talker);
 struct nmea_sentence
 {
       std::string description;
@@ -61,7 +61,7 @@ extern std::map<std::string, image> mid_country;
 
 
 
-unsigned int parse_nmea(std::string nmea_str);
+int32 parse_nmea(std::string nmea_str);
 bool parse_char(const std::string & s, char & c);
 bool parse_int(const std::string & s, int & i);
 bool parse_double(const std::string & s, double & f);

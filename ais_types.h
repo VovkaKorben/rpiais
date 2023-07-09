@@ -97,18 +97,18 @@ public:
       }
 };
 
-enum class position_type_e
+enum  position_type_e
 {
-      unknown = 0, previous, glonass, gps, POS_MAX
+      //unknown = 0,
+      previous, gga, rmc, gns, gll, POS_MAX
 };
-
+enum gnss_type
+{
+      gps, glonass, waas
+};
 struct own_vessel_class
 {
 private:
-      // gps 2
-      // glonass 1
-      // prev pos 0
-      //int pos_count;
       std::vector<FloatPoint> pos_arr;
 
       position_type_e pos_priority;
@@ -117,10 +117,12 @@ private:
       FloatPoint gps, meters;
 
 public:
+      char sel_mode, mode;
+
       /////////////////////////////////////////////////////////////////////////
       inline FloatPoint get_gps()
       {
-            return pos_arr[(int)pos_priority];
+            return pos_arr[(int32)pos_priority];
       };
       inline FloatPoint get_meters()
       {
@@ -140,7 +142,7 @@ public:
       };
       /////////////////////////////////////////////////////////////////////////
       inline int  get_heading() { return heading; }
-      void set_heading(int h)
+      void set_heading(int32 h)
       {
             heading = h;
             heading_set = true;
@@ -156,8 +158,8 @@ public:
       /////////////////////////////////////////////////////////////////////////
       own_vessel_class()
       {
-            pos_arr.resize((int)position_type_e::POS_MAX);
-            pos_priority = position_type_e::unknown;
+            pos_arr.resize((int32)position_type_e::POS_MAX);
+            pos_priority = position_type_e::previous;
 
             heading_set = false;
             relative = false;
@@ -168,22 +170,110 @@ public:
 
 
 };
+
 struct satellite
 {
-      int snr, elevation, azimuth;
+      int32 snr, elevation, azimuth;
+      gnss_type gnss;
+      int32 used;
       uint64_t last_access;
+      int32 is_active()
+      { // satellite remains active, if it accessed last 60 seconds
+            return ((utc_ms() - last_access) < 60000) ? 1 : 0;
+
+      }
 };
 
 
-extern std::map<int, satellite> sattelites;
+class satellites
+{
+
+public:
+      std::map<int32, satellite> list; // map [prn] = params
+      satellites()
+      {
+            int32 c;
+            satellite s;
+            s.last_access = 0;
+            s.used = 0;
+            s.gnss = gnss_type::gps;
+            for (c = 0; c <= 32; c++)
+            {
+                  list.emplace(c, s);
+            }
+            s.gnss = gnss_type::waas;
+            for (c = 33; c <= 64; c++)
+            {
+                  list.emplace(c, s);
+            }
+            s.gnss = gnss_type::glonass;
+            for (c = 65; c <= 89; c++)
+            {
+                  list.emplace(c, s);
+            }
+
+      }
+      std::vector<gnss_type> get_gnss_type(IntVec* sat_list)
+      {
+            std::vector<gnss_type> r;
+            r.clear();
+            gnss_type gnss;
+            for (const int32 prn : *sat_list)
+            {
+                  if (list.count(prn) == 0)
+                  {
+                        printf("[!] Satellite with PRN %d not found\n", prn);
+                        continue;
+                  }
+                  gnss = list[prn].gnss;
+                  std::vector<gnss_type>::iterator it = std::find(r.begin(), r.end(), gnss);
+                  if (it == r.end())
+                        r.push_back(gnss);
+            }
+            return r;
+      }
+      void reset_used(gnss_type gnss) // reset used flag for entire GNSS type
+      {
+            for (auto s : list)
+            {
+                  if (s.second.gnss == gnss)
+                        s.second.used = 0;
+            }
+      }
+      void set_used(IntVec* used_list) // set used flag for selected PRNs
+      {
+            for (int32 prn : *used_list)
+            {
+                  list[prn].used = 1;
+            }
+
+      }
+      int32 get_used_count()
+      {
+            int32 r = 0;
+            for (auto const& s : list)
+            {
+                  if (s.second.used)
+                        r++;
+            }
+            return r;
+      }
+      int32 get_active_count()
+      {
+            int32 r = 0;
+            for (auto& s : list)
+            {
+                  if (s.second.is_active())
+                        r++;
+            }
+            return r;
+      }
+};
+
+
+//extern 
 extern own_vessel_class own_vessel;
 extern std::map<int, vessel> vessels;
-
-
-//extern own_vessel_class own_vessel;
-//extern map<int, vessel> vessels;
-//extern map<int, satellite> sattelites;
-
-
+extern satellites sat;
 
 #endif

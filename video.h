@@ -14,10 +14,14 @@ const ARGB clBlack = 0x000000;
 const ARGB clWhite = 0xFFFFFF;
 const ARGB clNone = 0xFFFFFFFF;
 const ARGB clLtGray = 0xC0C0C0;
+const ARGB clDkGray = 0x404040;
 const ARGB clGray = 0x808080;
 const ARGB clRed = 0xFF0000;
+const ARGB clGreen = 0x00FF00;
+const ARGB clYellow = 0xFFFF00;
 const ARGB clBlue = 0x0000FF;
 
+const ARGB clTransparency12 = 0x20000000;
 const ARGB clTransparency25 = 0x40000000;
 const ARGB clTransparency50 = 0x80000000;
 const ARGB clTransparency75 = 0xC0000000;

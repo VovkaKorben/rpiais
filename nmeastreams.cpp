@@ -16,7 +16,8 @@ std::mutex m;
 int32 process_buffer(StringQueue* list, pchar buff, int32 len)
 {
       int32 search_pos = 0, found_at;
-      char  rn[3] = "\r\n", copybuff[BUFFLEN];
+      char  //rn[3] = "\r\n", 
+            copybuff[BUFFLEN];
 
 
       char  separator[2] = "\n";
@@ -51,152 +52,167 @@ int32 process_buffer(StringQueue* list, pchar buff, int32 len)
 
 uint32 sock_connect(sockets_s* opt)
 {
-      switch (opt->type) {
-            case SERIAL_FILE: {
+      try {
+            switch (opt->type) {
+                  case SERIAL_FILE: {
 
-                  opt->fd = open(opt->addr, O_RDONLY);
-                  if (opt->fd < 0) {
-                        printf("[E] Error #%d with message: %s \n", errno, std::strerror(errno));
-                        return -1;
+                        opt->fd = open(opt->addr, O_RDONLY);
+                        if (opt->fd < 0) {
+                              printf("[E] Error #%d with message: %s \n", errno, std::strerror(errno));
+                              return -1;
+                        }
+                        break;
                   }
-                  break;
-            }
-            case SOCK_DGRAM: {
+                  case SOCK_DGRAM: {
 
-                  opt->fd = socket(AF_INET, opt->type, 0);
-                  fcntl(opt->fd, F_SETFL, O_NONBLOCK);
-                  break;
-            }
-            case SOCK_STREAM: {
-                  opt->fd = socket(AF_INET, opt->type, 0);
-                  int32 status = connect(opt->fd, (struct sockaddr*)&opt->servaddr, sizeof(opt->servaddr));
-                  if (status < 0)
-                  {
-                        close(opt->fd);
-                        return -2;
+                        opt->fd = socket(AF_INET, opt->type, 0);
+                        fcntl(opt->fd, F_SETFL, O_NONBLOCK);
+                        break;
                   }
+                  case SOCK_STREAM: {
+                        opt->fd = socket(AF_INET, opt->type, 0);
+                        int32 status = connect(opt->fd, (struct sockaddr*)&opt->servaddr, sizeof(opt->servaddr));
+                        if (status < 0)
+                        {
+                              close(opt->fd);
+                              return -2;
+                        }
 
-                  /*unsigned long nonblocking_long = 0;
-                  status = ioctl(opt->fd, FIONBIO, &nonblocking_long);
-                  if (status < 0)
-                  {
-                        close(opt->fd);
-                        return -2;
-                  }*/
+                        /*unsigned long nonblocking_long = 0;
+                        status = ioctl(opt->fd, FIONBIO, &nonblocking_long);
+                        if (status < 0)
+                        {
+                              close(opt->fd);
+                              return -2;
+                        }*/
 
+                  }
             }
+            return 0;
       }
-      return 0;
+      catch (...)
+      {
+            std::cerr << "[E] sock_connect" << std::endl;
+            return 1;
+      }
 }
 
 void rcv_thread(sockets_s opt, StringQueue* list) {
-      opt.running = 0;
-      char buff[BUFFLEN], path_full[256];
-      pchar current = buff;
-      int32 used = 0;
-
-      int32 n;
-
-
-      switch (opt.type)
+      try
       {
-            case SOCK_DGRAM:
-            case  SOCK_STREAM: {
-                  memset(&opt.servaddr, 0, sizeof(sockaddr_in));
-                  opt.servaddr.sin_family = AF_INET;
-                  opt.servaddr.sin_addr.s_addr = inet_addr(opt.addr);
-                  opt.servaddr.sin_port = htons(opt.port);
-                  sprintf(path_full, "%s://%s:%d\0", opt.type_str, opt.addr, opt.port);
-                  break;
-            }
-            case SERIAL_FILE:
+            opt.running = 0;
+            char buff[BUFFLEN], path_full[256];
+            pchar current = buff;
+            int32 used = 0;
+
+            int32 n;
+
+
+            switch (opt.type)
             {
-                  sprintf(path_full, "%s: %s\0", opt.type_str, opt.addr, opt.port);
-                  break;
-            }
-      }
-
-      //sprintf(path_full, "%s://%s:%d\0", opt.type_str, opt.addr, opt.port);
-
-      while (true) {
-
-            // connect section
-            //printf("Connsect start\n");
-            while (sock_connect(&opt))
-            {
-                  printf("[i] Can't connect to %s (%s). Reconnect in %d second(s).\n",
-                        path_full, opt.name, RECONNECT);
-                  usleep(RECONNECT * 1000000);
-            }
-            printf("[i] Connected to %s (%s)\n", path_full, opt.name);
-
-            // read section
-            //printf("read start\n");
-            opt.running = 1;
-            try {
-                  while (true)
+                  case SOCK_DGRAM:
+                  case  SOCK_STREAM: {
+                        memset(&opt.servaddr, 0, sizeof(sockaddr_in));
+                        opt.servaddr.sin_family = AF_INET;
+                        opt.servaddr.sin_addr.s_addr = inet_addr(opt.addr);
+                        opt.servaddr.sin_port = htons(opt.port);
+                        sprintf(path_full, "%s://%s:%d\0", opt.type_str, opt.addr, opt.port);
+                        break;
+                  }
+                  case SERIAL_FILE:
                   {
+                        sprintf(path_full, "%s: %s\0", opt.type_str, opt.addr, opt.port);
+                        break;
+                  }
+            }
 
-                        // read data
-                        switch (opt.type)
+            //sprintf(path_full, "%s://%s:%d\0", opt.type_str, opt.addr, opt.port);
+
+            while (true) {
+
+                  // connect section
+                  //printf("Connsect start\n");
+                  while (sock_connect(&opt))
+                  {
+                        printf("[i] Can't connect to %s (%s). Reconnect in %d second(s).\n",
+                              path_full, opt.name, RECONNECT);
+                        usleep(RECONNECT * 1000000);
+                  }
+                  printf("[i] Connected to %s (%s)\n", path_full, opt.name);
+
+                  // read section
+                  //printf("read start\n");
+                  opt.running = 1;
+                  try {
+                        while (true)
                         {
-                              case SOCK_DGRAM: {
-                                    socklen_t len;
-                                    n = (int32)recvfrom(
-                                          opt.fd,
-                                          current,
-                                          BUFFLEN - used,
-                                          MSG_DONTWAIT,
-                                          (struct sockaddr*)&opt.servaddr,
-                                          &len
-                                    );
 
-                                    break;
-                              }
-                              case  SOCK_STREAM: {
-                                    n = (int32)recv(opt.fd, current, BUFFLEN - used, 0);
-                                    break;
-                              }
-                              case SERIAL_FILE: {
+                              // read data
+                              switch (opt.type)
+                              {
+                                    case SOCK_DGRAM: {
+                                          socklen_t len;
+                                          n = (int32)recvfrom(
+                                                opt.fd,
+                                                current,
+                                                BUFFLEN - used,
+                                                MSG_DONTWAIT,
+                                                (struct sockaddr*)&opt.servaddr,
+                                                &len
+                                          );
 
-                                    n = read(opt.fd, current, BUFFLEN - used);
-                                    //printf("%s\n", current);
-                                    break;
-                              }
-                        }
-                        //printf("N: %d\n", n);
+                                          break;
+                                    }
+                                    case  SOCK_STREAM: {
+                                          n = (int32)recv(opt.fd, current, BUFFLEN - used, 0);
+                                          break;
+                                    }
+                                    case SERIAL_FILE: {
 
-                        if (n == 0)
-                        {
-                              opt.running = 0;
-                              printf("Connection lost with %s (%s)\n", path_full, opt.name);
-                              break;
-                        }
-                        else
-                              if (n < 0)
+                                          n = (int32)read(opt.fd, current, BUFFLEN - used);
+                                          //printf("%s\n", current);
+                                          break;
+                                    }
+                              }
+                              //printf("N: %d\n", n);
+
+                              if (n == 0)
                               {
                                     opt.running = 0;
-                                    printf("[E] Error #%d with message: %s \n", errno, std::strerror(errno));
-                                    throw;
+                                    printf("Connection lost with %s (%s)\n", path_full, opt.name);
                                     break;
                               }
                               else
-                                    if (n > 0)
+                                    if (n < 0)
                                     {
-                                          used = process_buffer(list, buff, used + n);
-                                          current = buff + used;
+                                          opt.running = 0;
+                                          printf("[E] Error #%d with message: %s \n", errno, std::strerror(errno));
+                                          throw;
+                                          break;
                                     }
                                     else
-                                          usleep(500000);
-                  }
+                                          if (n > 0)
+                                          {
+                                                used = process_buffer(list, buff, used + n);
+                                                current = buff + used;
+                                          }
+                                          else
+                                                usleep(500000);
+                        }
 
+                  }
+                  catch (...)
+                  {
+                        printf("rcv_thread: exception occured!\n");
+                  }
+                  printf("read end\n");
             }
-            catch (...)
-            {
-                  printf("rcv_thread: exception occured!");
-            }
-            printf("read end\n");
       }
+      catch (...)
+      {
+            std::cerr << "[E] rcv_thread" << std::endl;
+      }
+
 }
 
 

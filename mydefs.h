@@ -119,6 +119,8 @@ typedef std::queue<std::string> StringQueue;
 typedef std::vector<std::string> StringArray;
 typedef std::vector<std::string>* PStringArray;
 typedef std::vector<StringArray> StringArrayBulk;
+typedef std::vector<int32> IntVec;
+typedef std::vector<int32>::iterator IntVecIter;
 
 inline bool is_zero(double v1) { return std::abs(v1) < 0.000001; }
 inline int isign(double v) { if (v > 0.0)            return 1;      else if (v < 0.0)            return -1;      else return 0; };

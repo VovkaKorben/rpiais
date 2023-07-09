@@ -28,22 +28,23 @@ const uint64 SHAPES_UPDATE_FIRST = 3 * 1000;  // 3 sec for startup updates
 uint64 next_map_update;
 #endif
 
-int min_fit, circle_radius;
+int32 min_fit, circle_radius;
 
 
 image* img_minus, * img_plus;
 const int32 ZOOM_BTN_MARGIN = 20;
 
 
-std::map <int, poly>  shapes;
+std::map <int32, poly>  shapes;
 
-int show_info_window = 0;
+int32 show_info_window = 0;
 //using namespace std;
 video_driver* screen;
 mysql_driver* mysql;
 touchscreen* touchscr;
 touch_manager* touchman;
 nmea_reciever* nmea_recv;
+
 StringQueue  nmea_list;
 
 
@@ -71,7 +72,7 @@ int  update_nmea()
       }
       return c;
 }
-void zoom_changed(int new_zoom_index)
+void zoom_changed(int32 new_zoom_index)
 {
 
       if (new_zoom_index < 0)
@@ -414,7 +415,7 @@ void draw_grid(double angle)
             angle += 90.0;
             if (angle >= 360.0) angle -= 360.0;
       }
-      int v;
+      int32 v;
       std::string s;
       for (uint32 i = 1; i < 6; i++)
       {
@@ -427,7 +428,8 @@ void draw_grid(double angle)
             fp.to_decart();
             v = ZOOM_RANGE[zoom_index] / 5 * i;
             if (v >= 1000)  // make large numbers more compact
-                  s = string_format("%d.%d", v / 1000, v % 1000);
+                  //     s = string_format("%d.%d", v / 1000, v % 1000);
+                  s = string_format("%.1f", v / 1000.0);
             else
                   s = string_format("%d", v);
             screen->draw_text(FONT_OUTLINE, CENTER_X + fp.ix(), CENTER_Y + fp.iy(), s, HALIGN_CENTER | VALIGN_CENTER, clBlack, clLand);
@@ -454,7 +456,7 @@ void draw_infoline()
             string_format("\x81 %.6f %.6f", gps.x, gps.y),
             VALIGN_BOTTOM | HALIGN_LEFT,
             clBlack, clLand, true);
-      screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY - SPACEY, "\x80 5/12", VALIGN_TOP | HALIGN_LEFT, clBlack, clLand, true);
+      screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY - SPACEY, string_format("\x80 %d/%d", sat.get_used_count(), sat.get_active_count()), VALIGN_TOP | HALIGN_LEFT, clBlack, clLand, true);
 
 }
 void draw_vessels_info() {
@@ -546,12 +548,72 @@ void draw_vessels_info() {
 
 void draw_infowindow_global()
 {
+      int32 col_pos[6] = { 0,25,50,75,100,400 };
       int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
+
+      // window header
       screen->draw_text(FONT_MONOMEDIUM, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
-      screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
-      screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
-      screen->draw_text(FONT_NORMAL, x, y, " global info (sattelites etc)", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+
+      // satellite table header      
+      screen->draw_text(FONT_NORMAL, x + col_pos[1], y, "PRN", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, x + col_pos[2], y, "El", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, x + col_pos[3], y, "Az", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, x + col_pos[4], y, "SNR", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      y -= 4 + screen->get_font_height(FONT_NORMAL);
+
+      // satellite table
+      ARGB color;
+      int32 lw;
+      for (auto& s : sat.list)
+      {
+            if (!s.second.used && !s.second.is_active())
+                  continue;
+            
+            // draw satellite SNR bar
+
+            if (s.second.snr < 10)
+            {
+                  color = clRed;
+            }
+            else
+                  if (s.second.snr > 20)
+                  {
+                        color = clGreen;
+                  }
+                  else
+                  {
+                        color = clYellow;
+                  }
+
+            if (!s.second.used)
+            {
+                  color |= clTransparency75;
+            }
+
+            lw = ((col_pos[5] - col_pos[4]) * s.second.snr) / 100;
+            screen->fill_rect(x + col_pos[4]+2 , y - 8, x + col_pos[4]+lw+1, y, color);
+
+            // draw satellite text data
+            if (s.second.used)
+            {
+                  color = clBlack;
+            }
+            else if (s.second.is_active())
+            {
+                  color = clGray;
+            }
+            else
+            {
+                  continue;
+            }
+            screen->draw_text(FONT_NORMAL, x + col_pos[1], y, string_format("%d", s.first), VALIGN_TOP | HALIGN_RIGHT, color, clNone);
+            screen->draw_text(FONT_NORMAL, x + col_pos[2], y, string_format("%d", s.second.elevation), VALIGN_TOP | HALIGN_RIGHT, color, clNone);
+            screen->draw_text(FONT_NORMAL, x + col_pos[3], y, string_format("%d", s.second.azimuth), VALIGN_TOP | HALIGN_RIGHT, color, clNone);
+            screen->draw_text(FONT_NORMAL, x + col_pos[4], y, string_format("%d", s.second.snr), VALIGN_TOP | HALIGN_RIGHT, color, clNone);
+            y -= 4 + screen->get_font_height(FONT_NORMAL);
+      }
 }
+
 
 void draw_infowindow_vessel()
 {
@@ -571,15 +633,20 @@ void draw_infowindow()
             return;
       // draw window
       //const int32 lh = 12;
-      screen->fill_rect(WINDOW_RECT, clWhite | clTransparency25);
+      screen->fill_rect(WINDOW_RECT, clWhite | clTransparency12);
       screen->rectangle(WINDOW_RECT, clBlack);
 
-      if (show_info_window < 0)
+      if (show_info_window == -1)
       {// global info (sattelites etc)
             draw_infowindow_global();
 
       }
-      else
+      //else if (show_info_window == -2)
+      //{// global info (sattelites etc)
+      //      draw_infowindow_global();
+
+      //}
+      else if (show_info_window > 0)
       { // ship info
             draw_infowindow_vessel();
       }
@@ -587,47 +654,53 @@ void draw_infowindow()
 }
 void draw_frame()
 {
-
-      /*
-      if (!own_vessel.pos_ok())
+      try
       {
-            // print `no GPS` and exit
-            screen->rectangle(SCREEN_RECT, 0x001111);
-            //screen->draw_text(FONT_NORMAL, screen->get_width() / 2, screen->get_height() / 2, "no GPS position", VALIGN_CENTER | HALIGN_CENTER, 0xFFFF00, clWhite);
-            return;
-      }
-      */
-      screen->fill_rect(SCREEN_RECT, clSea);
+            /*
+            if (!own_vessel.pos_ok())
+            {
+                  // print `no GPS` and exit
+                  screen->rectangle(SCREEN_RECT, 0x001111);
+                  //screen->draw_text(FONT_NORMAL, screen->get_width() / 2, screen->get_height() / 2, "no GPS position", VALIGN_CENTER | HALIGN_CENTER, 0xFFFF00, clWhite);
+                  return;
+            }
+            */
+            screen->fill_rect(SCREEN_RECT, clSea);
 
-      //screen->draw_text(SPECCY_FONT, screen->get_width() / 2, 25, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
-      //FloatPoint mypos = own_vessel.get_pos();
-      //mypos.latlon2meter();
-      // offset MYPOS from gps center to geometrical boat center
+            //screen->draw_text(SPECCY_FONT, screen->get_width() / 2, 25, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
+            //FloatPoint mypos = own_vessel.get_pos();
+            //mypos.latlon2meter();
+            // offset MYPOS from gps center to geometrical boat center
 
 
 #if map_show==1
-      next_map_update = update_map_data(next_map_update);
-      draw_shapes(clLand, clBlack);//0x16150e
+            next_map_update = update_map_data(next_map_update);
+            draw_shapes(clLand, clBlack);//0x16150e
 #endif
 
-      draw_grid(own_vessel.get_relative() ? own_vessel.get_heading() : 0.0);
+            draw_grid(own_vessel.get_relative() ? own_vessel.get_heading() : 0.0);
 
 
 #if vessels_show==1
-      draw_vessels(0xcd8183, clBlack);
+            draw_vessels(0xcd8183, clBlack);
 #endif
-      draw_vessels_info();
+            draw_vessels_info();
 
-      // plus and minus images
-      screen->draw_image(img_minus, ZOOM_BTN_MARGIN, screen->height() - ZOOM_BTN_MARGIN, HALIGN_LEFT | VALIGN_TOP, 150);
-      screen->draw_image(img_plus, SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN, screen->height() - ZOOM_BTN_MARGIN, HALIGN_RIGHT | VALIGN_TOP, 150);
+            // plus and minus images
+            screen->draw_image(img_minus, ZOOM_BTN_MARGIN, screen->height() - ZOOM_BTN_MARGIN, HALIGN_LEFT | VALIGN_TOP, 150);
+            screen->draw_image(img_plus, SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN, screen->height() - ZOOM_BTN_MARGIN, HALIGN_RIGHT | VALIGN_TOP, 150);
 
-      draw_infoline();
+            draw_infoline();
 
-      int x = SHIPLIST_RECT.left() + 5, y = SHIPLIST_RECT.bottom() + 5;
-      screen->draw_text(FONT_NORMAL, x, y, string_format("ZOOM #%d %f", zoom_index, zoom), VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clNone);
+            int x = SHIPLIST_RECT.left() + 5, y = SHIPLIST_RECT.bottom() + 5;
+            screen->draw_text(FONT_NORMAL, x, y, string_format("ZOOM #%d %f", zoom_index, zoom), VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clNone);
 
-      draw_infowindow();
+            draw_infowindow();
+      }
+      catch (...)
+      {
+            std::cerr << "[E] draw_frame" << std::endl;
+      }
 }
 ////////////////////////////////////////////////////////////
 void process_touches() {
@@ -894,6 +967,7 @@ int main()
             init_touch(&ini);
             init_database();
             init_sock(&ini);
+            //sat = new sattelites();
 
             zoom_changed(zoom_index);
 #if map_show==1
@@ -901,16 +975,27 @@ int main()
 #else
             std::cout << "Map draw disabled (#define map_show 0)" << std::endl;
 #endif
-            //touchscr->simulate_click(20, 20);
+            
+            // simulate info bar click
+            touchscr->simulate_click(20, 20);
+            
+            
             video_loop_start();
             return 0;
+      }
+      catch (const char* exception) // обработчик исключений типа const char*
+      {
+            std::cerr << "Error: " << exception << '\n';
       }
       catch (char* e) {
             std::cerr << "[EXCEPTION] " << e << std::endl;
             return false;
       }
-      return 0;
+      catch (...) {
+            std::cerr << "[E] " << std::endl;
       }
+      return 0;
+}
 
 
 // 60.39705229794781, 5.315458423270774

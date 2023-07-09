@@ -38,14 +38,19 @@ int mysql_driver::exec(std::string query) {
 
       if (mysql_query(connection, query.c_str()))
       {
+#ifdef QUERY_LOG
             fprintf(stderr, " mysql_query() failed\n");
             fprintf(stderr, " query: %s\n", query.c_str());
             fprintf(stderr, " %s\n", mysql_error(connection));
             last_error_str = mysql_error(connection);
+
             printf("Query FAILED: %s\n\n", query.c_str());
+#endif
             return 1;
       }
-      //printf("\n\n--- Query OK ---\n\n");
+#ifdef QUERY_LOG
+      printf("\n\n--- Query OK ---\n%s\n------------------------\n", query.c_str());
+#endif
       return 0;
 
 }
@@ -202,69 +207,69 @@ int load_dicts(mysql_driver* driver)
 
             while (driver->fetch()) {
                   switch (dict_index) {
-                  case 0: {
-                        std::string  str_id = driver->get_mystr("id");
-                        std::transform(str_id.begin(), str_id.end(), str_id.begin(), ::toupper);
-                        if (lut.count(str_id) == 0)
-                              throw std::runtime_error("no handler for " + str_id);
-                        sentences.insert({ str_id, {
+                        case 0: {
+                              std::string  str_id = driver->get_mystr("id");
+                              std::transform(str_id.begin(), str_id.end(), str_id.begin(), ::toupper);
+                              if (lut.count(str_id) == 0)
+                                    throw std::runtime_error("no handler for " + str_id);
+                              sentences.insert({ str_id, {
+                                          driver->get_mystr("description"),
+                                          driver->get_myint("grouped"),
+                                          lut[str_id]
+                                          } });
+                              break;
+                        }
+                        case 1: // load talkers
+                        {
+                              std::string str_id = driver->get_mystr("id");
+                              talkers.insert({ str_id, {
                                     driver->get_mystr("description"),
-                                    driver->get_myint("grouped"),
-                                    lut[str_id]
+                                    driver->get_myint("obsolete"),
                                     } });
-                        break;
-                  }
-                  case 1: // load talkers
-                  {
-                        std::string str_id = driver->get_mystr("id");
-                        talkers.insert({ str_id, {
-                              driver->get_mystr("description"),
-                              driver->get_myint("obsolete"),
-                              } });
-                        break;
-                  }
-                  case 2: {
-                        vdm_length[driver->get_myint("id")] = driver->get_myint("len");
-                        break;
-                  }
-                  case 3: {
-                        int msg_id = driver->get_myint("msg_id");
-                        if (vdm_defs.count(msg_id) == 0)
-                              vdm_defs[msg_id] = {};
+                              break;
+                        }
+                        case 2: {
+                              vdm_length[driver->get_myint("id")] = driver->get_myint("len");
+                              break;
+                        }
+                        case 3: {
+                              int msg_id = driver->get_myint("msg_id");
+                              if (vdm_defs.count(msg_id) == 0)
+                                    vdm_defs[msg_id] = {};
 
-                        std::string fieldname = driver->get_mystr("ref"); // `ref` value
-                        std::transform(fieldname.begin(), fieldname.end(), fieldname.begin(), ::toupper);
-                        vdm_defs[msg_id].push_back({
-                              driver->get_myint("start"),// start
-                              driver->get_myint("len"),// len
-                              fieldname,
-                              driver->get_myint("type"),// type
-                              driver->get_myint("def"),// def
-                              driver->get_myint("exp"),// exp
-                              });
-                        break;
-                  }
-                  case 4: { // MID data
+                              std::string fieldname = driver->get_mystr("ref"); // `ref` value
+                              std::transform(fieldname.begin(), fieldname.end(), fieldname.begin(), ::toupper);
+                              vdm_defs[msg_id].push_back({
+                                    driver->get_myint("start"),// start
+                                    driver->get_myint("len"),// len
+                                    fieldname,
+                                    driver->get_myint("type"),// type
+                                    driver->get_myint("def"),// def
+                                    driver->get_myint("exp"),// exp
+                                    });
+                              break;
+                        }
+                        case 4: { // MID data
 
-                        //std::map<int, mid_struct_s> mid_list;
-                        //std::map<std::string, image> mid_country;
+                              //std::map<int, mid_struct_s> mid_list;
+                              //std::map<std::string, image> mid_country;
 
 
-                        int mid = driver->get_myint("mid");
-                        mid_struct_s mid_s;
-                        mid_s.code = driver->get_mystr("abbr");
-                        mid_s.country = driver->get_mystr("country");
-                        mid_list.insert({ mid, mid_s });
-                        //img_minus = new image();
-                        std::string filename = string_format(data_path("/img/flags/%s.png"), mid_s.code.c_str());
-                        if (file_exists(filename))
-                              mid_country.insert({ mid_s.code, image(filename) });
-                        else
-                              std::cout << "File not found: " << filename.c_str() << std::endl;
+                              int mid = driver->get_myint("mid");
+                              mid_struct_s mid_s;
+                              mid_s.code = driver->get_mystr("abbr");
+                              mid_s.country = driver->get_mystr("country");
+                              mid_list.insert({ mid, mid_s });
+                              //img_minus = new image();
+                              std::string filename = string_format(data_path("/img/flags/%s.png"), mid_s.code.c_str());
+                              if (file_exists(filename))
+                                    mid_country.insert({ mid_s.code, image(filename) });
+                              else
+                                    std::cout << "File not found: " << filename.c_str() << std::endl;
 
 
-                        break;
-                  }
+                              break;
+                        }
 
                   }
             }

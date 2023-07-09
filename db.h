@@ -11,6 +11,8 @@
 #define PREPARED_MAP1 1
 #define PREPARED_MAP2 2
 
+//#define QUERY_LOG
+
 class  mysql_driver
 {
 private:

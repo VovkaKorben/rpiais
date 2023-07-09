@@ -19,68 +19,53 @@ std::map<int, int> vdm_length;
 
 std::map<int, mid_struct_s> mid_list;
 std::map<std::string, image> mid_country;
+std::map<std::string, StringArrayBulk> msg_buff;
 
-struct msg_bulk {
-      size_t total;
-      std::map<int, StringArray> messages;
-      msg_bulk()
-      {
-            total = 0;
-            messages.clear();
-      };
-};
-typedef std::map<std::string, msg_bulk> groups;
-groups buff;
-
-bool check_buff(std::string sentence, StringArray data, StringArrayBulk * bulk)
+bool check_buff(std::string sentence, StringArray* data, StringArrayBulk* bulk)
 {
 
-      int group_id, message_id, message_total;
-      if (!parse_int(data[0], message_total))
+      int32 group_id, message_id, message_total;
+      if (!parse_int(data->at(0), message_total))
             message_total = 1;
-      if (!parse_int(data[1], message_id))
+      if (!parse_int(data->at(1), message_id))
             message_id = 1;
 
       // only VDM sentence has a group ID, another sentences has only one group and assume it 0
       if (sentence == "VDM")
       {
-            if (!parse_int(data[2], group_id))
+            if (!parse_int(data->at(2), group_id))
                   group_id = 0;
-            data.erase(data.begin(), data.begin() + 3);
+            data->erase(data->begin(), data->begin() + 3);
       }
       else
       {
             group_id = 0;
-            data.erase(data.begin(), data.begin() + 2);
+            data->erase(data->begin(), data->begin() + 2);
       }
 
       // check group exists, create if not
-      std::string group_name = string_format("%s_%d", sentence, group_id);
-      if (buff.count(group_name) == 0)
+      std::string group_name = string_format("%s_%d", sentence.c_str(), group_id);
+      if (msg_buff.count(group_name) == 0)
       {
-            msg_bulk group;
-            //group = new msg_bulk();
-            buff[group_name] = group;
-            buff[group_name].total = message_total;
+            msg_buff.emplace(std::piecewise_construct, std::forward_as_tuple(group_name), std::forward_as_tuple());
       }
 
-      // paste new data to group
-      if (buff[group_name].messages.count(message_id) != 0)
+      // check for message allowed to push (i.e.
+      if (msg_buff[group_name].size() == (size_t)(message_id - 1))
       {
-            // warn: message with same ID already exists in group
+            msg_buff[group_name].push_back(*data);
       }
-      buff[group_name].messages[message_id] = data;
 
       // check group is full
-      if (buff[group_name].messages.size() == buff[group_name].total)
+      if (msg_buff[group_name].size() == (size_t)message_total)
       {
             // push all collected messages
-            for (auto const & msg : buff[group_name].messages)
-                  (*bulk).push_back(msg.second);
+            bulk->clear();
+            for (auto const& msg : msg_buff[group_name])
+                  (*bulk).push_back(msg);
 
             // delete collected group
-            buff.erase(group_name);
-            //print_buff();
+            msg_buff[group_name].clear();
             return true;
       }
       else return false;
@@ -93,7 +78,7 @@ double dm_s2deg(double dm_s)
       int	int_part = (int)trunc(dm_s);
       return (int_part / 100 + (int_part % 100 + (dm_s - int_part)) / 60);
 }
-bool parse_char(const std::string & s, char & c)
+bool parse_char(const std::string& s, char& c)
 {
       if (s.length() != 1)
             return false;
@@ -103,11 +88,11 @@ bool parse_char(const std::string & s, char & c)
             c -= 32;
       return true;
 }
-bool parse_int(const std::string & s, int & i)
+bool parse_int(const std::string& s, int& i)
 {
+      i = 0;
       if (s.length() == 0)
             return false;
-      i = 0;
       for (size_t p = 0; p < s.length(); p++) {
             if (isdigit(s[p]))
                   i = i * 10 + (s[p] - 48);
@@ -117,7 +102,7 @@ bool parse_int(const std::string & s, int & i)
       return true;
 
 }
-bool parse_double(const std::string & s, double & f)
+bool parse_double(const std::string& s, double& f)
 {
       if (s.length() == 0)
             return false;
@@ -173,18 +158,11 @@ bool parse_double(const std::string & s, double & f)
       return true;
 }
 
-int _gga(StringArrayBulk * data)
-{
-      return 0;
-}
-int _gsa(StringArrayBulk * data)
-{
-      return 0;
-}
-int _gll(StringArrayBulk * data)
+// posistion
+int32 _gll(StringArrayBulk* data, std::string talker)
 {
       char data_valid;
-      StringArray * d = &(data->at(0));
+      StringArray* d = &(data->at(0));
       if (parse_char(d->at(5), data_valid))
             if (data_valid == 'A')
             {
@@ -193,7 +171,7 @@ int _gll(StringArrayBulk * data)
                   double lon, lat;
 
                   if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir) &&
-                      parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
+                        parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
                   {
                         if (lat_dir == 'S')
                               lat = -lat;
@@ -204,12 +182,35 @@ int _gll(StringArrayBulk * data)
             }
       return 1;
 }
-int _rmc(StringArrayBulk * data)
+int32 _gns(StringArrayBulk* data, std::string talker)
+{
+      char data_valid;
+      StringArray* d = &(data->at(0));
+      if (parse_char(d->at(5), data_valid))
+            if (data_valid == 'A')
+            {
+                  // vessel * ownship = vessels.get_own();
+                  char lon_dir, lat_dir;
+                  double lon, lat;
+
+                  if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir) &&
+                        parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
+                  {
+                        if (lat_dir == 'S')
+                              lat = -lat;
+                        if (lon_dir == 'W')
+                              lon = -lon;
+                  }
+                  return 0;
+            }
+      return 1;
+}
+int32 _rmc(StringArrayBulk* data, std::string talker)
 {
 
       char data_valid;
-      StringArray * d = &(data->at(0));
-      if (parse_char(d->at(5), data_valid))
+      StringArray* d = &(data->at(0));
+      if (parse_char(d->at(1), data_valid))
             if (data_valid == 'A')
             {
                   //vessel * ownship = vessels.get_own();
@@ -217,49 +218,134 @@ int _rmc(StringArrayBulk * data)
                   double lon, lat;
 
                   if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir)
-                      && parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
+                        && parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
                   {
                         if (lat_dir == 'S')
                               lat = -lat;
                         if (lon_dir == 'W')
                               lon = -lon;
-                       // own_vessel.set_pos
+                        // own_vessel.set_pos
                   }
                   return 0;
             }
       return 1;
 }
-int _gsv(StringArrayBulk * data)
+int32 _gga(StringArrayBulk* data, std::string talker)
 {
-      bool first = true;
-      int sat_count, prn;
-      size_t  pos;
+      int32 gps_quality;
+      StringArray* d = &(data->at(0));
+      if (parse_int(d->at(5), gps_quality))
+            if (gps_quality > 0)
+            {
+                  char lon_dir, lat_dir;
+                  double lon, lat;
+
+                  if (parse_double(d->at(1), lat) && parse_char(d->at(2), lat_dir) &&
+                        parse_double(d->at(3), lon) && parse_char(d->at(4), lon_dir))
+                  {
+                        if (lat_dir == 'S')
+                              lat = -lat;
+                        if (lon_dir == 'W')
+                              lon = -lon;
+                  }
+                  return 0;
+            }
+      return 1;
+}
+// satellites
+int32 //GSA - GPS DOP and active satellites
+_gsa(StringArrayBulk* data, std::string talker)
+{
+      //char selection, fix_mode;
+      StringArray* d = &(data->at(0));
+      parse_char(d->at(0), own_vessel.sel_mode);
+      parse_char(d->at(1), own_vessel.mode);
+
+      IntVec prn_list;
+      int32 prn;
+      for (int32 s = 0; s < 12; s++)
+      {
+            if (!parse_int(d->at(s + 2), prn))
+                  break;
+            prn_list.push_back(prn);
+      }
+      std::vector<gnss_type> systems_list = sat.get_gnss_type(&prn_list);
+      if (systems_list.size() != 1)
+      {
+            printf("[!] GSA: satellites list from more than one system (%d)", systems_list.size());
+            return 1;
+      }
+      sat.reset_used(systems_list[0]); // reset used flag for entire GNSS type
+      sat.set_used(&prn_list); // set used flag for selected PRNs
+
+      return 0;
+}
+
+
+int32 // GSV
+_gsv(StringArrayBulk* data, std::string talker)
+{
+      struct sp
+      {
+            int32 prn, el, az, snr;
+      } tsp;
+      IntVec prn_list;
+      std::vector<sp> buff;
+      int32 first = 1, sat_count, tmp_count, pos;
       for (StringArray s : *data)
       {
-            int tmp_count;
+            // check all message consistency
             parse_int(s.at(0), tmp_count);
             if (first)
             {
-                  first = false;
+                  first = 0;
                   sat_count = tmp_count;
             }
             else {
                   if (sat_count != tmp_count)
                   {
-                        std::cout << "warn satellites count differ" << std::endl;
+                        printf("[!] satellites count differ, first message was %d, then %d", sat_count, tmp_count);
                   }
             }
+
             pos = 1;
-            while ((pos + 4) < s.size())
+            while ((size_t)(pos + 4) <= s.size())
             {
-                  parse_int(s.at(pos), prn);
-                  sattelites[prn].last_access = utc_ms();
-                  parse_int(s.at(pos + 1), sattelites[prn].elevation);
-                  parse_int(s.at(pos + 2), sattelites[prn].azimuth);
-                  parse_int(s.at(pos + 3), sattelites[prn].snr);
-                  pos += 4;
+                  parse_int(s.at(pos++), tsp.prn);
+                  parse_int(s.at(pos++), tsp.el);
+                  parse_int(s.at(pos++), tsp.az);
+                  parse_int(s.at(pos++), tsp.snr);
+                  /* sattelites[prn].last_access = utc_ms();
+                   parse_int(s.at(pos + 1), sattelites[prn].elevation);
+                   parse_int(s.at(pos + 2), sattelites[prn].azimuth);
+                   parse_int(s.at(pos + 3), sattelites[prn].snr);
+                   */
+                  buff.push_back(tsp);
+                  prn_list.push_back(tsp.prn);
+                  //pos += 4;
             }
 
+      }
+      std::vector<gnss_type> systems_list = sat.get_gnss_type(&prn_list);
+      if (systems_list.size() != 1)
+      {
+            printf("[!] GSV: satellites list from more than one system (%d)\n", systems_list.size());
+            for (auto x : prn_list)
+                  printf("%d,", x);
+            printf("\n");
+            return 1;
+      }
+      for (auto const& s : buff)
+      {
+            if (sat.list.count(s.prn) == 0)
+            {
+                  printf("[!] GSV: satellite #%d not found in main list", s.prn);
+                  continue;
+            }
+            sat.list[s.prn].azimuth = s.az;
+            sat.list[s.prn].elevation = s.el;
+            sat.list[s.prn].snr = s.snr;
+            sat.list[s.prn].last_access = utc_ms();
       }
       return 0;
 }
@@ -285,8 +371,8 @@ std::map<std::string, field_indexes> vdm_case_lut = {
     { "TO_PORT", field_indexes::left },
     { "TO_STARBOARD", field_indexes::right },
 };
-
-int _vdm(StringArrayBulk * data)
+// vessels
+int _vdm(StringArrayBulk* data, std::string talker)
 {
       bitcollector bc;
       int pad_bits;
@@ -342,7 +428,7 @@ int _vdm(StringArrayBulk * data)
 
       // parsing fields
       int32 mmsi, pos_collect = 0, size_collect = 0;
-      vessel * v = nullptr;
+      vessel* v = nullptr;
 
       for (vdm_field f : vdm_defs[msg_id])
       {
@@ -448,13 +534,13 @@ int _vdm(StringArrayBulk * data)
 
 
       }
-      
+
       if (!v->size_ok) { // check size already set
             v->size_ok = (size_collect == 0x0F); // if not set - look at collected values
             if (v->size_ok) // if collected values is OK - update vessel bounds
                   v->size_changed();
       }
-      
+
       if (!v->pos_ok)
       {
             v->pos_ok = (pos_collect == 0x03);
@@ -465,93 +551,110 @@ int _vdm(StringArrayBulk * data)
 
       return 0;
 }
-int _vdo(StringArrayBulk * data)
+int _vdo(StringArrayBulk* data, std::string talker)
 {
-      return _vdm(data);
+      return _vdm(data, talker);
 }
 std::map<std::string, nmea_talker> talkers;
 std::map<std::string, nmea_sentence> sentences;
 std::map<std::string, FnPtr> lut = {
-      {"GGA",_gga},
-      {"GSA",_gsa},
-      {"RMC",_rmc},
-      {"GSV",_gsv},
-      {"VDM",_vdm},
+      {"GLL",_gll},// GLL - Geographic Position - Latitude / Longitude: prio 1
+      {"GNS",_gns},// GNS - Fix data: prio 2
+      {"RMC",_rmc}, // RMC - Recommended Minimum Navigation Information, prio 3
+      {"GGA",_gga}, // GGA - Global Positioning System Fix Data: prio 4
+
+      {"GSA",_gsa}, // GSA - GPS DOP and active satellites
+      {"GSV",_gsv}, // GSV - Satellites in view
+
+      {"VDM",_vdm}, // common vessel messages
        {"VDO",_vdo},
-      {"GLL",_gll},
+
 };
 
 
-unsigned int parse_nmea(std::string nmea_str)
+int32 parse_nmea(std::string nmea_str)
 {
-      //printf("NMEA: %s\n", nmea_str.c_str());
-      unsigned int r = NMEA_GOOD;
-      if (nmea_str.length() == 0)
-            return (r | NMEA_EMPTY);
-      if (nmea_str[0] != '!' && nmea_str[0] != '$')
-            r |= NMEA_WRONG_HEADER;
+      try {
+            //printf("NMEA: %s\n", nmea_str.c_str());
+            unsigned int r = NMEA_GOOD;
+            if (nmea_str.length() == 0)
+                  return (r | NMEA_EMPTY);
+            if (nmea_str[0] != '!' && nmea_str[0] != '$')
+                  r |= NMEA_WRONG_HEADER;
 
-      // process asterisk
-      size_t  asterisk_pos = nmea_str.find_first_of('*');
-      if (asterisk_pos == std::string::npos)
-            return (r | NMEA_NO_ASTERISK);
-      if (asterisk_pos >= (nmea_str.length() - 2))
-            return (r | NMEA_NO_CHECKSUM);
+            // process asterisk
+            size_t  asterisk_pos = nmea_str.find_first_of('*');
+            if (asterisk_pos == std::string::npos)
+                  return (r | NMEA_NO_ASTERISK);
+            if (asterisk_pos >= (nmea_str.length() - 2))
+                  return (r | NMEA_NO_CHECKSUM);
 
-      // calc checksum
-      uint8 cs = 0;
-      size_t pos = 1;
-      while (pos < asterisk_pos)
-            cs ^= (uint8)nmea_str[pos++];
-      std::string calculated_cs = string_format("%.2X", cs),
-            origin_cs = nmea_str.substr(asterisk_pos + 1, 2);
-      if (calculated_cs != origin_cs)
-            r |= NMEA_BAD_CHECKSUM;
+            // calc checksum
+            uint8 cs = 0;
+            size_t pos = 1;
+            while (pos < asterisk_pos)
+                  cs ^= (uint8)nmea_str[pos++];
+            std::string calculated_cs = string_format("%.2X", cs),
+                  origin_cs = nmea_str.substr(asterisk_pos + 1, 2);
+            if (calculated_cs != origin_cs)
+                  return  NMEA_BAD_CHECKSUM;
 
 
-      // explode string to array
-      nmea_str = nmea_str.substr(1, asterisk_pos - 1);
-      StringArray data = str_split(nmea_str.c_str());
-      if (data.size() == 0)
-            return NMEA_NO_DATA;
+            // explode string to array
+            nmea_str = nmea_str.substr(1, asterisk_pos - 1);
+            StringArray data = str_split(nmea_str.c_str());
+            if (data.size() == 0)
+                  return NMEA_NO_DATA;
 
-      // extract header
-      std::string header = data[0];
-      std::transform(header.begin(), header.end(), header.begin(), ::toupper);
+            // extract header
+            std::string header = data[0];
+            std::transform(header.begin(), header.end(), header.begin(), ::toupper);
 
-      // extract talker and sentence from header
-      std::string _sentence = header.substr(header.length() - 3, 3),
-            _talker = header.substr(0, header.length() - 3);
-      if (talkers.count(_talker) == 0)
-            r |= NMEA_UNKNOWN_TALKER;
-      if (sentences.count(_sentence) == 0)
-            return (r | NMEA_UNKNOWN_SENTENCE);
+            // extract talker and sentence from header
+            std::string _sentence = header.substr(header.length() - 3, 3),
+                  _talker = header.substr(0, header.length() - 3);
+            if (talkers.count(_talker) == 0)
+                  r |= NMEA_UNKNOWN_TALKER;
+            if (sentences.count(_sentence) == 0)
+                  return (r | NMEA_UNKNOWN_SENTENCE);
 
-      // push data to buffer, for non-grouped sentences - instantly process them
-      data.erase(data.begin());
-      StringArrayBulk bulk;
-      if (sentences[_sentence].grouped)
-      {
-            if (check_buff(_sentence, data, &bulk))
+#ifndef NDEBUG
+            std::string collect = "";
+            for (const auto& a : data)
             {
-                  r |= sentences[_sentence].handler(&bulk);
-                  /*if (r)
-                  {
-                        cout << id << "\n";
-                        print_data(&bulk);
-                        system("pause");
-                  }*/
+                  collect += a + "`";
             }
+            std::cout << collect.c_str() << std::endl;
+#endif
+
+            // push data to buffer, for non-grouped sentences - instantly process them
+            data.erase(data.begin());
+            StringArrayBulk bulk;
+
+
+
+            if (sentences[_sentence].grouped)
+            { // multiline messages
+                  if (check_buff(_sentence, &data, &bulk))
+                  {
+                        r |= sentences[_sentence].handler(&bulk, _talker);
+                  }
+            }
+            else
+            { // for single line messages            
+                  bulk.push_back(data);
+
+                  r |= sentences[_sentence].handler(&bulk, _talker);
+            }
+
+
+            return r;
       }
-      else
+      catch (...)
       {
-            //	bulk = new StringArrayBulk;
-            bulk.push_back(data);
-            r |= sentences[_sentence].handler(&bulk);
+            std::cerr << "[E] parse_nmea" << std::endl;
+            return 404;
       }
-
-
-      return r;
 }
 
 
@@ -638,7 +741,7 @@ uint32 bitcollector::get_raw(const int32 start, const int32 len)
       }
       return r;
 }
-int32 bitcollector::get_int(const vdm_field * f)
+int32 bitcollector::get_int(const vdm_field* f)
 {
       int32 r = get_raw(f->start, f->len);
       uint32  sign_bit = 1 << (f->len - 1);
@@ -646,7 +749,7 @@ int32 bitcollector::get_int(const vdm_field * f)
             r = (r & ~sign_bit) | 0x80000000;
       return r;
 }
-double bitcollector::get_double(const vdm_field * f)
+double bitcollector::get_double(const vdm_field* f)
 {
       double r;
       int32 raw = get_raw(f->start, f->len);
@@ -657,7 +760,7 @@ double bitcollector::get_double(const vdm_field * f)
             r /= (double)(f->exp);
       return r;
 }
-std::string bitcollector::get_string(const vdm_field * f)
+std::string bitcollector::get_string(const vdm_field* f)
 {
 
       std::string r = "";
@@ -675,7 +778,7 @@ std::string bitcollector::get_string(const vdm_field * f)
 void bitcollector::add_vdm_str(std::string data, int pad)
 {
       uint32 code;
-      for (auto & ch : data)
+      for (auto& ch : data)
       {
 
             code = ch - 48;
@@ -690,7 +793,7 @@ void bitcollector::clear()
       for (int i = bitcollector_buff_len - 1; i >= 0; i--)
             buff[i] = 0;
 }
-StringArray bitcollector::create_vdm(int & group_id)
+StringArray bitcollector::create_vdm(int& group_id)
 {
 
       int payload_size = length / 6;
