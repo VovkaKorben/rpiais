@@ -1,18 +1,9 @@
 #include <string>
 #include <iostream>
 #include <map>
-//#include <mysql/jdbc.h>
 #include <vector>
 #include <algorithm>
-
 #include "nmea.h"
-
-//using namespace std;
-
-
-
-
-
 
 std::map<int, std::vector<vdm_field> > vdm_defs;
 std::map<int, int> vdm_length;
@@ -20,7 +11,15 @@ std::map<int, int> vdm_length;
 std::map<int, mid_struct_s> mid_list;
 std::map<std::string, image> mid_country;
 std::map<std::string, StringArrayBulk> msg_buff;
-
+bool convert_nmea_to_gps(double& dm_s)
+{
+      int32	int_part = (int)trunc(dm_s);
+      double a1 = int_part / 100;
+      double a2 = (int_part % 100) / 60.0;
+      double a3 = (dm_s - int_part) / 60.0;
+      dm_s = a1 + a2 + a3;
+      return true;
+}
 bool check_buff(std::string sentence, StringArray* data, StringArrayBulk* bulk)
 {
 
@@ -69,14 +68,6 @@ bool check_buff(std::string sentence, StringArray* data, StringArrayBulk* bulk)
             return true;
       }
       else return false;
-}
-
-
-
-double dm_s2deg(double dm_s)
-{
-      int	int_part = (int)trunc(dm_s);
-      return (int_part / 100 + (int_part % 100 + (dm_s - int_part)) / 60);
 }
 bool parse_char(const std::string& s, char& c)
 {
@@ -158,25 +149,55 @@ bool parse_double(const std::string& s, double& f)
       return true;
 }
 
-// posistion
-int32 _gll(StringArrayBulk* data, std::string talker)
+// posistion:   gga, rmc, gns, gll
+int32 _gga(StringArrayBulk* data, std::string talker)
 {
-      char data_valid;
+      int32 gps_quality;
       StringArray* d = &(data->at(0));
-      if (parse_char(d->at(5), data_valid))
-            if (data_valid == 'A')
+      if (parse_int(d->at(5), gps_quality))
+            if (gps_quality > 0)
             {
-                  // vessel * ownship = vessels.get_own();
                   char lon_dir, lat_dir;
                   double lon, lat;
 
-                  if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir) &&
-                        parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
+                  if (parse_double(d->at(1), lat) && parse_char(d->at(2), lat_dir) &&
+                        parse_double(d->at(3), lon) && parse_char(d->at(4), lon_dir))
                   {
+                        //lon /= 100.0;                        lat /= 100.0;
+                        convert_nmea_to_gps(lon);
+                        convert_nmea_to_gps(lat);
                         if (lat_dir == 'S')
                               lat = -lat;
                         if (lon_dir == 'W')
                               lon = -lon;
+                        own_vessel.set_pos({ lon,lat }, position_type_e::gga);
+                  }
+                  return 0;
+            }
+      return 1;
+}
+int32 _rmc(StringArrayBulk* data, std::string talker)
+{
+
+      char data_valid;
+      StringArray* d = &(data->at(0));
+      if (parse_char(d->at(1), data_valid))
+            if (data_valid == 'A')
+            {
+                  //vessel * ownship = vessels.get_own();
+                  char lon_dir, lat_dir;
+                  double lon, lat;
+                  parse_double(d->at(0), lat);
+                  if (parse_double(d->at(2), lat) && parse_char(d->at(3), lat_dir)
+                        && parse_double(d->at(4), lon) && parse_char(d->at(5), lon_dir))
+                  {
+                        convert_nmea_to_gps(lon);
+                        convert_nmea_to_gps(lat);
+                        if (lat_dir == 'S')
+                              lat = -lat;
+                        if (lon_dir == 'W')
+                              lon = -lon;
+                        own_vessel.set_pos({ lon,lat }, position_type_e::rmc);
                   }
                   return 0;
             }
@@ -196,62 +217,45 @@ int32 _gns(StringArrayBulk* data, std::string talker)
                   if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir) &&
                         parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
                   {
+                        convert_nmea_to_gps(lon);
+                        convert_nmea_to_gps(lat);
                         if (lat_dir == 'S')
                               lat = -lat;
                         if (lon_dir == 'W')
                               lon = -lon;
+                        own_vessel.set_pos({ lon,lat }, position_type_e::gns);
                   }
                   return 0;
             }
       return 1;
 }
-int32 _rmc(StringArrayBulk* data, std::string talker)
+int32 _gll(StringArrayBulk* data, std::string talker)
 {
-
       char data_valid;
       StringArray* d = &(data->at(0));
-      if (parse_char(d->at(1), data_valid))
+      if (parse_char(d->at(5), data_valid))
             if (data_valid == 'A')
             {
-                  //vessel * ownship = vessels.get_own();
+                  // vessel * ownship = vessels.get_own();
                   char lon_dir, lat_dir;
                   double lon, lat;
 
-                  if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir)
-                        && parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
+                  if (parse_double(d->at(0), lat) && parse_char(d->at(1), lat_dir) &&
+                        parse_double(d->at(2), lon) && parse_char(d->at(3), lon_dir))
                   {
+                        convert_nmea_to_gps(lon);
+                        convert_nmea_to_gps(lat);
                         if (lat_dir == 'S')
                               lat = -lat;
                         if (lon_dir == 'W')
                               lon = -lon;
-                        // own_vessel.set_pos
+                        own_vessel.set_pos({ lon,lat }, position_type_e::gll);
                   }
                   return 0;
             }
       return 1;
 }
-int32 _gga(StringArrayBulk* data, std::string talker)
-{
-      int32 gps_quality;
-      StringArray* d = &(data->at(0));
-      if (parse_int(d->at(5), gps_quality))
-            if (gps_quality > 0)
-            {
-                  char lon_dir, lat_dir;
-                  double lon, lat;
 
-                  if (parse_double(d->at(1), lat) && parse_char(d->at(2), lat_dir) &&
-                        parse_double(d->at(3), lon) && parse_char(d->at(4), lon_dir))
-                  {
-                        if (lat_dir == 'S')
-                              lat = -lat;
-                        if (lon_dir == 'W')
-                              lon = -lon;
-                  }
-                  return 0;
-            }
-      return 1;
-}
 // satellites
 int32 //GSA - GPS DOP and active satellites
 _gsa(StringArrayBulk* data, std::string talker)
@@ -280,8 +284,6 @@ _gsa(StringArrayBulk* data, std::string talker)
 
       return 0;
 }
-
-
 int32 // GSV
 _gsv(StringArrayBulk* data, std::string talker)
 {

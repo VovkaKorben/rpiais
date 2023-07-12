@@ -1,14 +1,10 @@
-#define map_show 1
-#define vessels_show 1
 #include "mydefs.h"
-
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <algorithm>
 #include <cfloat>
-
 #include "pixfont.h"
 #include "video.h"
 #include "nmea.h"
@@ -17,16 +13,17 @@
 #include <chrono>
 #include "touch.h"
 #include <cstdint>
-#include <bits/stdc++.h>
+//#include <bits/stdc++.h>
 #include <stdlib.h>
 #include "nmeastreams.h"
 #include <SimpleIni.h>
 #include <queue>
-#if map_show==1
-const uint64 SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
-const uint64 SHAPES_UPDATE_FIRST = 3 * 1000;  // 3 sec for startup updates
+
+//const uint64 SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
+const uint64 SHAPES_UPDATE = 10 * 1000;  // 5 min for update shapes
 uint64 next_map_update;
-#endif
+int32 gps_session_id,gps_points_count;
+
 
 int32 min_fit, circle_radius;
 
@@ -40,7 +37,7 @@ std::map <int32, poly>  shapes;
 int32 show_info_window = 0;
 //using namespace std;
 video_driver* screen;
-mysql_driver* mysql;
+
 touchscreen* touchscr;
 touch_manager* touchman;
 nmea_reciever* nmea_recv;
@@ -58,7 +55,7 @@ int init_sock(CSimpleIniA* ini)
       nmea_recv = new nmea_reciever(ini, &nmea_list);
       return 0;
 }
-int  update_nmea()
+int32  update_nmea()
 {
       std::string nmea_str;
       int32 c = 0;
@@ -71,6 +68,7 @@ int  update_nmea()
             c++;
       }
       return c;
+
 }
 void zoom_changed(int32 new_zoom_index)
 {
@@ -85,7 +83,7 @@ void zoom_changed(int32 new_zoom_index)
 ////////////////////////////////////////////////////////////
 IntPoint transform_point(FloatPoint pt)
 {
-      pt.offset_remove(own_vessel.get_meters());
+      //pt.offset_remove(own_vessel.get_meters());
 
       pt.to_polar();
       if (own_vessel.get_relative())
@@ -143,9 +141,7 @@ IntRect rotate_shape(poly* shape)
 
 }
 ////////////////////////////////////////////////////////////
-#if map_show==1
-
-int load_shapes()
+int32 load_shapes()
 {
 
       //MYSQL_RES * res;      MYSQL_ROW row;
@@ -177,11 +173,12 @@ int load_shapes()
       const char* cstr = tmp.c_str();
 
       // IntRect tmp = VIEWBOX_RECT;
+      FloatPoint gps = own_vessel.get_meters();
       mysql->exec_prepared(PREPARED_MAP1,
-            own_vessel.get_meters().x + VIEWBOX_RECT.left() * overlap_coeff,
-            own_vessel.get_meters().y + VIEWBOX_RECT.bottom() * overlap_coeff,
-            own_vessel.get_meters().x + VIEWBOX_RECT.right() * overlap_coeff,
-            own_vessel.get_meters().y + VIEWBOX_RECT.top() * overlap_coeff,
+            gps.x + VIEWBOX_RECT.left() * overlap_coeff,
+            gps.y + VIEWBOX_RECT.bottom() * overlap_coeff,
+            gps.x + VIEWBOX_RECT.right() * overlap_coeff,
+            gps.y + VIEWBOX_RECT.top() * overlap_coeff,
             cstr);
       //mysql->free_result();
       while (mysql->has_next());
@@ -263,50 +260,48 @@ int load_shapes()
 uint64_t  update_map_data(uint64_t next_check)
 {
       uint64_t ms = utc_ms();
-      if (ms > next_check)
+      if (own_vessel.get_pos_index())
       {
-            load_shapes();
-            //garbage_shapes(shapes)
-            next_check += SHAPES_UPDATE;
+
+            if (ms > next_check)
+            {
+                  load_shapes();
+                  //garbage_shapes(shapes)
+                  next_check = ms + SHAPES_UPDATE;
+            }
+            //      else                  next_check = ms + SHAPES_UPDATE_FIRST;
+            return next_check;
       }
       else
-            next_check += SHAPES_UPDATE_FIRST;
+            return ms;
 
-
-      return next_check;
-
-
+      //return 0;
 }
-#endif
+
 ////////////////////////////////////////////////////////////
 void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 {
       IntRect test_box;
       const vessel* v;
-      FloatPoint vessel_center, fp;
+      FloatPoint vessel_center, fp, own_pos;
       IntPoint int_center;
       uint32 circle_size = imax((int)(6 * zoom), 3);
+      own_pos = own_vessel.get_meters();
       for (const auto& vx : vessels)
       {
-            //printf("lat lon: %.12f,%.12f\n", v.lat, v.lon);
-           // printf("mmsi lat lon: %d %.12f,%.12f\n",v.first,  v.lat, v.lon);
             v = &vx.second;
             if (v->pos_ok)
             {
-
                   // calculate vessel center (with zoom and rotation)
-
                   vessel_center = v->gps;
                   vessel_center.latlon2meter();
 
-                  vessel_center.offset_remove(own_vessel.get_meters());
+                  vessel_center.offset_remove(own_pos);
                   vessel_center.to_polar();
                   vessel_center.y *= zoom;
                   if (own_vessel.get_relative())
                         vessel_center.x -= own_vessel.get_heading();
                   vessel_center.to_decart();
-
-
 
                   int_center = vessel_center.to_int();
                   int_center.offset_add(CENTER_X, CENTER_Y);
@@ -445,15 +440,18 @@ void draw_infoline()
 
       std::time_t now = sysclock_t::to_time_t(sysclock_t::now());
 
-
+      // time and date
       std::strftime(buf, sizeof(buf), "%H:%M:%S", std::localtime(&now));
       screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY + SPACEY, std::string(buf), VALIGN_BOTTOM | HALIGN_RIGHT, clBlack, clLand, true);
       std::strftime(buf, sizeof(buf), "%a,%e %b", std::localtime(&now));
       screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY - SPACEY, std::string(buf), VALIGN_TOP | HALIGN_RIGHT, clBlack, clLand, true);
-      FloatPoint gps = own_vessel.get_gps();
+
+
+      FloatPoint gps = own_vessel.get_pos();
+      //double lon = dm_s2deg_v2(gps.x),            lat = dm_s2deg_v2(gps.y);
       screen->draw_text(FONT_MONOMEDIUM,
             PIVOTX + SPACEX, PIVOTY + SPACEY,
-            string_format("\x81 %.6f %.6f", gps.x, gps.y),
+            string_format("\x81 %.8f %.8f", gps.x, gps.y),// lon, lat),
             VALIGN_BOTTOM | HALIGN_LEFT,
             clBlack, clLand, true);
       screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY - SPACEY, string_format("\x80 %d/%d", sat.get_used_count(), sat.get_active_count()), VALIGN_TOP | HALIGN_LEFT, clBlack, clLand, true);
@@ -483,7 +481,7 @@ void draw_vessels_info() {
       for (std::map<int, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {
 
             if (it->second.pos_ok)
-                  it->second.distance = it->second.gps.haversine(own_vessel.get_gps());
+                  it->second.distance = it->second.gps.haversine(own_vessel.get_pos());
             else
                   it->second.distance = INT_MAX;
             mmsi.push_back(it->first);
@@ -568,7 +566,7 @@ void draw_infowindow_global()
       {
             if (!s.second.used && !s.second.is_active())
                   continue;
-            
+
             // draw satellite SNR bar
 
             if (s.second.snr < 10)
@@ -591,7 +589,7 @@ void draw_infowindow_global()
             }
 
             lw = ((col_pos[5] - col_pos[4]) * s.second.snr) / 100;
-            screen->fill_rect(x + col_pos[4]+2 , y - 8, x + col_pos[4]+lw+1, y, color);
+            screen->fill_rect(x + col_pos[4] + 2, y - 8, x + col_pos[4] + lw + 1, y, color);
 
             // draw satellite text data
             if (s.second.used)
@@ -613,7 +611,12 @@ void draw_infowindow_global()
             y -= 4 + screen->get_font_height(FONT_NORMAL);
       }
 }
+void draw_timewindow_global()
+{
+      int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
+      screen->draw_text(FONT_MONOMEDIUM, x, y, "Time Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone);//y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
 
+}
 
 void draw_infowindow_vessel()
 {
@@ -636,9 +639,14 @@ void draw_infowindow()
       screen->fill_rect(WINDOW_RECT, clWhite | clTransparency12);
       screen->rectangle(WINDOW_RECT, clBlack);
 
-      if (show_info_window == -1)
+      if (show_info_window == -2)
       {// global info (sattelites etc)
             draw_infowindow_global();
+
+      }
+      else if (show_info_window == -1)
+      {// time, path, etc
+            draw_timewindow_global();
 
       }
       //else if (show_info_window == -2)
@@ -670,20 +678,19 @@ void draw_frame()
             //screen->draw_text(SPECCY_FONT, screen->get_width() / 2, 25, "HAS GPS !!!", 0xFFFF00, VALIGN_CENTER | HALIGN_CENTER);
             //FloatPoint mypos = own_vessel.get_pos();
             //mypos.latlon2meter();
-            // offset MYPOS from gps center to geometrical boat center
 
+            if (!own_vessel.get_pos_index())
+            {
+                  screen->draw_text(FONT_MONOMEDIUM,
+                        screen->width() / 2, screen->height() / 2,
+                        "NO GPS", VALIGN_CENTER | HALIGN_CENTER, clDkRed, clNone);
+                  return;
+            }
+            touchman->set_enabled(1);
 
-#if map_show==1
-            next_map_update = update_map_data(next_map_update);
-            draw_shapes(clLand, clBlack);//0x16150e
-#endif
-
+            draw_shapes(clLand, clBlack);
             draw_grid(own_vessel.get_relative() ? own_vessel.get_heading() : 0.0);
-
-
-#if vessels_show==1
             draw_vessels(0xcd8183, clBlack);
-#endif
             draw_vessels_info();
 
             // plus and minus images
@@ -732,7 +739,7 @@ void process_touches() {
                         }
                         case TOUCH_GROUP_INFOLINE:
                         { // show info window
-                              show_info_window = -1;
+                              show_info_window = -1 - area_id; // -1 for time, -2 for gps
 
                               // deactivate all touch groups,except window group
                               touchman->set_groups_active(0);
@@ -799,6 +806,7 @@ void video_loop_start() {
 
             //last_msg_id = update_nmea(last_msg_id);
             update_nmea();
+            next_map_update = update_map_data(next_map_update);
             draw_frame();
 
             process_touches();
@@ -907,10 +915,12 @@ void init_touch(CSimpleIniA* ini) {
       //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
 
       touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
-      touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
+      touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),CENTER_X ,40 });
+      touchman->add_rect(TOUCH_GROUP_INFOLINE, 1, { CENTER_X,SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
 
       touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
       touchman->add_rect(TOUCH_GROUP_INFOWINDOW, 0, WINDOW_RECT);
+      touchman->set_enabled(0);
 }
 void init_database() {
       mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
@@ -970,16 +980,13 @@ int main()
             //sat = new sattelites();
 
             zoom_changed(zoom_index);
-#if map_show==1
-            next_map_update = utc_ms() - 1;
-#else
-            std::cout << "Map draw disabled (#define map_show 0)" << std::endl;
-#endif
-            
+
+            next_map_update = 0;
+
             // simulate info bar click
-            touchscr->simulate_click(20, 20);
-            
-            
+            //touchscr->simulate_click(20, 20);
+
+
             video_loop_start();
             return 0;
       }
@@ -996,6 +1003,3 @@ int main()
       }
       return 0;
 }
-
-
-// 60.39705229794781, 5.315458423270774

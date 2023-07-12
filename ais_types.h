@@ -4,6 +4,7 @@
 #include <map>
 #include <vector>
 #include "mydefs.h"
+#include "db.h"
 
 
 struct poly {
@@ -100,7 +101,7 @@ public:
 enum  position_type_e
 {
       //unknown = 0,
-      previous, gga, rmc, gns, gll, POS_MAX
+      gga, rmc, gns, gll
 };
 enum gnss_type
 {
@@ -109,62 +110,79 @@ enum gnss_type
 struct own_vessel_class
 {
 private:
-      std::vector<FloatPoint> pos_arr;
+      FloatPoint position[4], meters[4];
 
-      position_type_e pos_priority;
-      int32 heading;
-      bool heading_set, relative;
-      FloatPoint gps, meters;
+      int32 pos_index;
+      int32 heading, _heading_set, relative;
+
+      //      FloatPoint get_gps();      meters;
 
 public:
       char sel_mode, mode;
 
       /////////////////////////////////////////////////////////////////////////
-      inline FloatPoint get_gps()
+      FloatPoint get_pos()
       {
-            return pos_arr[(int32)pos_priority];
+            if (pos_index)
+                  return  position[pos_index - 1];
+            else return { 0.0,0.0 };
       };
-      inline FloatPoint get_meters()
+      FloatPoint get_meters()
       {
-            return meters;
+            if (pos_index)
+                  return  meters[pos_index - 1];
+            else return { 0.0,0.0 };
       };
-      //bool pos_ok()      {            return pos_priority >= 0;      };
       void set_pos(FloatPoint position_gps, position_type_e priority)
       {
             //if (priority < 0 || priority >= pos_count)                  throw "own_vessel_class: priority index error";
-            pos_arr[(int)priority] = position_gps;
+            int32 int_prio = (int32)priority;
+            position[int_prio] = position_gps;
+            position_gps.latlon2meter();
+            meters[int_prio] = position_gps;
+            int_prio++;
+            
+            //mysql->exec_prepared(PREPARED_GPS);
 
-            if (priority >= pos_priority) {
-                  pos_priority = priority;
-                  meters = position_gps;
-                  meters.latlon2meter();
+            /*FloatPoint gps = own_vessel.get_meters();
+            mysql->exec_prepared(PREPARED_MAP1,
+                  gps.x + VIEWBOX_RECT.left() * overlap_coeff,
+                  gps.y + VIEWBOX_RECT.bottom() * overlap_coeff,
+                  gps.x + VIEWBOX_RECT.right() * overlap_coeff,
+                  gps.y + VIEWBOX_RECT.top() * overlap_coeff,
+                  cstr);
+            //mysql->free_result();
+            while (mysql->has_next());
+            */
+            if (int_prio >= pos_index)
+            {
+                  pos_index = int_prio;
+
             }
+
       };
       /////////////////////////////////////////////////////////////////////////
-      inline int  get_heading() { return heading; }
+      inline int32  get_heading() { return heading; }
       void set_heading(int32 h)
       {
             heading = h;
-            heading_set = true;
+            _heading_set = 1;
       };
       /////////////////////////////////////////////////////////////////////////
-      inline bool  get_relative() { return relative; }
+      inline int32  get_relative() { return relative; }
       void set_relative()
       {
-            if (heading_set)
-                  relative = !relative;
-            else relative = false;
+            relative ^= 1;
       }
       /////////////////////////////////////////////////////////////////////////
       own_vessel_class()
       {
-            pos_arr.resize((int32)position_type_e::POS_MAX);
-            pos_priority = position_type_e::previous;
-
-            heading_set = false;
-            relative = false;
-
-
+            pos_index = 0;
+            _heading_set = 0;
+            relative = 0;
+      }
+      int32 get_pos_index() {
+            return pos_index;
       }
 
 
@@ -234,7 +252,7 @@ public:
       }
       void reset_used(gnss_type gnss) // reset used flag for entire GNSS type
       {
-            for (auto s : list)
+            for (auto& s : list)
             {
                   if (s.second.gnss == gnss)
                         s.second.used = 0;

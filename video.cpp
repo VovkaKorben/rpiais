@@ -4,14 +4,11 @@
 
 #include <algorithm>
 #include <fcntl.h>
-
-
 #include <stdlib.h>
 #include <malloc.h>
 #include <string.h>
 #include "video.h"
 #include "pixfont.h"
-
 #include <unistd.h>
 #include <linux/fb.h>
 #include <sys/mman.h>

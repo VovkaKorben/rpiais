@@ -431,6 +431,8 @@ void touch_manager::dump()
       }
 }
 int touch_manager::check_point(const int32 x, const int32 y, int32& group_id, int32& area_id) {
+      if (!enabled)
+            return 0;
       for (const touch_group group : groups)
             if (group.active)
                   for (touch_coords tmp : group.areas) {
@@ -442,6 +444,12 @@ int touch_manager::check_point(const int32 x, const int32 y, int32& group_id, in
                   }
       return 0;
 }
+
+
+void touch_manager::set_enabled(int32 mode)
+{
+      enabled = mode;
+}
 #ifndef NDEBUG
 void touch_manager::debug(video_driver* scr) {
 
@@ -449,6 +457,9 @@ void touch_manager::debug(video_driver* scr) {
       for (const touch_group group : groups)
       {
             clr = group.active ? 0xFF0000 : 0x00FF00;
+            if (!enabled)
+                  clr |= clTransparency75;
+
             for (touch_coords tmp : group.areas)
             {
                   switch (tmp.type) {

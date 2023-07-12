@@ -17,6 +17,8 @@ const ARGB clLtGray = 0xC0C0C0;
 const ARGB clDkGray = 0x404040;
 const ARGB clGray = 0x808080;
 const ARGB clRed = 0xFF0000;
+const ARGB clDkRed = 0x880000;
+
 const ARGB clGreen = 0x00FF00;
 const ARGB clYellow = 0xFFFF00;
 const ARGB clBlue = 0x0000FF;

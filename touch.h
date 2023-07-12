@@ -64,12 +64,14 @@ private:
       float min_correction[3], minval[3], maxval[3], zoom[3];
       int invert[3];
       int32 max_axes;
+     
 public:
       size_t count();
       bool pop(touches_coords_s& t);
       touchscreen(CSimpleIniA* ini, int32 w, int32 h);
       ~touchscreen();
       void simulate_click(int32 x, int32 y);
+    
 };
 
 /////////////////////////////////////
@@ -111,20 +113,23 @@ class touch_manager
 private:
       std::vector <touch_group> groups;
       //std::unordered_map<int, std::vector <touch_coords>> areas;
-      touch_group* get_group(int group_index);
+      touch_group* get_group(int32 group_index);
       void sort_by_priority();
+      int32 enabled;
 public:
       touch_manager();
       ~touch_manager();
-      int set_group_active(int32 group_id, int32 active);
+      int32 set_group_active(int32 group_id, int32 active);
       void set_groups_active(int32 active);
-      int add_group(int32 group_id, int32 priority, int32 active = 1);
-      int clear_group(int32 group_id);
-      int add_rect(int32 group_id, int32 area_id, IntRect rct);
-      int add_circle(int32 group_id, int32 area_id, IntCircle circle);
-      int add_circle(int32 group_id, int32 area_id, IntPoint center, uint32 radius);
+      int32 add_group(int32 group_id, int32 priority, int32 active = 1);
+      int32 clear_group(int32 group_id);
+      int32 add_rect(int32 group_id, int32 area_id, IntRect rct);
+      int32 add_circle(int32 group_id, int32 area_id, IntCircle circle);
+      int32 add_circle(int32 group_id, int32 area_id, IntPoint center, uint32 radius);
       void dump();
-      int check_point(const int32 x, const int32 y, int32& group_id, int32& area_id);
+      int32 check_point(const int32 x, const int32 y, int32& group_id, int32& area_id);
+      
+      void set_enabled(int32 mode);
       //int check_point(const int32 x, const int32 y, int32 & group_index, int32 & area_index);
 #ifndef NDEBUG
       void debug(video_driver* screen);

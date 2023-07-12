@@ -8,7 +8,7 @@
 #include "nmea.h"
 #include "ais_types.h"
 
-
+mysql_driver* mysql;
 
 std::string read_text(std::string filename)
 {
@@ -292,21 +292,19 @@ int init_db(mysql_driver* driver)
       driver->prepare(PREPARED_NMEA, data_path("/sql/nmearead.sql"));
       driver->prepare(PREPARED_MAP1, data_path("/sql/mapread1.sql"));
       driver->prepare(PREPARED_MAP2, data_path("/sql/mapread2.sql"));
+      driver->prepare(PREPARED_GPS, data_path("/sql/store_gps.sql"));
 
-      //driver->exec_prepared(PREPARED_NMEA, 1234);
+      int32 gps_session;
 
-      // read last gps position
-      if (driver->exec_file(data_path("/sql/gpsread.sql"))) return 1;
+
+      // read last gps session ID
+      if (driver->exec_file(data_path("/sql/get_gps_session.sql")))
+            return 1;
       driver->store();
-      // driver->exec_file("/home/pi/projects/rpiais/sql/gpsread.sql");
       if (driver->row_count() == 1)
       {
             driver->fetch();
-
-            own_vessel.set_pos({
-                  driver->get_myfloat("lon"),
-                  driver->get_myfloat("lat")
-                  }, position_type_e::previous);
+            gps_session = driver->get_myint("sessionid")+1;
       }
       driver->has_next();
 

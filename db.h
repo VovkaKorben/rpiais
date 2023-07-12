@@ -3,15 +3,15 @@
 #define __DB_H
 #include <vector>
 #include <map>
-
 #include <mysql.h>
 #include "mydefs.h"
 
 #define PREPARED_NMEA 0
 #define PREPARED_MAP1 1
 #define PREPARED_MAP2 2
+#define PREPARED_GPS 3
 
-//#define QUERY_LOG
+
 
 class  mysql_driver
 {
@@ -64,6 +64,6 @@ public:
 int init_db(mysql_driver * driver);
 
 
-
+extern mysql_driver* mysql;
 
 #endif

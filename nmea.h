@@ -13,6 +13,36 @@
 #include "mydefs.h"
 #include "ais_types.h"
 #include "pixfont.h"
+//inline double dm_s2deg(double dm_s)
+//{
+//      int	int_part = (int)trunc(dm_s);
+//      return (int_part / 100 + (int_part % 100 + (dm_s - int_part)) / 60);
+//}
+
+//struct coordinate
+//{
+//      int32 d, m;
+//      double s;
+//      char side;
+//};
+//double convert_ddmm_to_deg(double c, int32 is_lat)
+//{
+//      double r = c / 100;
+//      c = remainder(c, 100.0);
+//      r += c / 60.0;
+//      return r;
+//
+//}
+//
+//coordinate convert_ddmm_to_dms(double c, int32 is_lat)
+//{
+//      coordinate r;
+//      r.d = c / 100;
+//      double m = remainder(c, 100.0);
+//      r.m = (int32)trunc(c) % 100;
+//
+//
+//}
 
 struct vdm_field
 {
@@ -20,7 +50,7 @@ struct vdm_field
       std::string field_name;
       int type, def, exp;
 };
-typedef int32 (*FnPtr)(StringArrayBulk * data,std::string talker);
+typedef int32(*FnPtr)(StringArrayBulk* data, std::string talker);
 struct nmea_sentence
 {
       std::string description;
@@ -62,9 +92,9 @@ extern std::map<std::string, image> mid_country;
 
 
 int32 parse_nmea(std::string nmea_str);
-bool parse_char(const std::string & s, char & c);
-bool parse_int(const std::string & s, int & i);
-bool parse_double(const std::string & s, double & f);
+bool parse_char(const std::string& s, char& c);
+bool parse_int(const std::string& s, int& i);
+bool parse_double(const std::string& s, double& f);
 
 #define bitcollector_buff_len 150
 #define bitcollector_buff_bits bitcollector_buff_len*8
@@ -82,12 +112,12 @@ public:
       void add_string(std::string data, size_t str_len);
       int get_len();
       uint32 get_raw(const int32 start, const int32 len);
-      int32 get_int(const vdm_field * f);
-      double get_double(const vdm_field * f);
-      std::string get_string(const vdm_field * f);
+      int32 get_int(const vdm_field* f);
+      double get_double(const vdm_field* f);
+      std::string get_string(const vdm_field* f);
       void add_vdm_str(std::string data, int pad);
       void clear();
-      StringArray create_vdm(int & group_id);
+      StringArray create_vdm(int& group_id);
       bitcollector();
 };
 
