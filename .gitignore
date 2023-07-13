@@ -378,3 +378,6 @@ FodyWeavers.xsd
 /img/test.png
 /img/speccy.psd
 /data
+/.vs22
+*.tlog
+/RCa10200
