@@ -7,8 +7,30 @@
 #include "mydefs.h"
 #include "nmea.h"
 #include "ais_types.h"
+#include <regex>
 
 mysql_driver* mysql;
+
+std::string BeautifyQuery(std::string query)
+{
+      //printf("SimplifyQuery in -----------------------\n%s\n", query.c_str());
+      std::vector<std::string> rx{
+            "--.+\\r\\n", "" // remove comments
+                  , "\\t|\\r\\n", " " // make tabs and new_line to space
+                  , "\\s{2,}", " " // make more two spaces into one
+                  //, "\\s?;\\s?", ";\n" // add new line for ;
+      };
+      size_t ptr = 0;
+      std::regex r;
+      while (ptr < rx.size())
+      {
+            r = rx[ptr++];
+            query = std::regex_replace(query, r, rx[ptr++]);
+            //  ptr += 2;
+      }
+      //printf("SimplifyQuery out -----------------------\n%s\n", query.c_str());
+      return query;
+}
 
 std::string read_text(std::string filename)
 {
@@ -39,17 +61,13 @@ int mysql_driver::exec(std::string query) {
       if (mysql_query(connection, query.c_str()))
       {
 #ifdef QUERY_LOG
-            fprintf(stderr, " mysql_query() failed\n");
-            fprintf(stderr, " query: %s\n", query.c_str());
-            fprintf(stderr, " %s\n", mysql_error(connection));
-            last_error_str = mysql_error(connection);
-
-            printf("Query FAILED: %s\n\n", query.c_str());
+            printf("Query FAILED (%s):\n\t%s\n", mysql_error(connection), BeautifyQuery(query).c_str());
 #endif
             return 1;
       }
 #ifdef QUERY_LOG
-      printf("\n\n--- Query OK ---\n%s\n------------------------\n", query.c_str());
+      else
+            printf("Query ok:\n\t%s\n", BeautifyQuery(query).c_str());
 #endif
       return 0;
 
@@ -102,6 +120,8 @@ bool mysql_driver::prepare(const int index, std::string filename) {
       if (pstmt.count(index) != 0)  return false;
       std::string query = read_text(filename);
       if (query.empty()) return false;
+      query = BeautifyQuery(query);
+
       pstmt.emplace(index, query);
       return true;
 }
@@ -139,7 +159,8 @@ size_t mysql_driver::field_index(const std::string field_name)
       return SIZE_MAX;
 
 }
-int mysql_driver::get_myint(const size_t index)
+
+int32 mysql_driver::get_myint(const size_t index)
 {
       if (row[index] == nullptr)
             return 0;
@@ -151,13 +172,46 @@ int mysql_driver::get_myint(const size_t index)
       return atoi(buff);
 
 }
-int mysql_driver::get_myint(const std::string field_name)
+int32 mysql_driver::get_myint(const std::string field_name)
 {
       size_t index = field_index(field_name);
       if (index == SIZE_MAX)
             throw std::runtime_error("field not found: " + field_name);
       return get_myint(index);
 }
+
+uint64_t mysql_driver::get_mybigint(const size_t index)
+{
+      if (row[index] == nullptr)
+            return 0;
+
+      //size_t size =);
+      uint64_t r = 0, mod = 1;
+      char x;
+      //char *xxx = row[index];
+      for (size_t c = strlen(row[index]); c > 0; c--)
+      {
+            x = row[index][c - 1];
+            x -= 48;
+            r += x * mod;
+            mod *= 10;
+      }
+      //char buff[size + 1];
+      return r;
+
+}
+uint64_t mysql_driver::get_mybigint(const std::string field_name)
+{
+      size_t index = field_index(field_name);
+      if (index == SIZE_MAX)
+      {
+            printf("[E] mysql_driver::get_mybigint: field with name '%s' not found.\n", field_name.c_str());
+            //throw std::runtime_error("field not found: " + field_name);
+
+      }
+      return get_mybigint(index);
+}
+
 std::string mysql_driver::get_mystr(const size_t index)
 {
 
@@ -292,9 +346,8 @@ int init_db(mysql_driver* driver)
       driver->prepare(PREPARED_NMEA, data_path("/sql/nmearead.sql"));
       driver->prepare(PREPARED_MAP1, data_path("/sql/mapread1.sql"));
       driver->prepare(PREPARED_MAP2, data_path("/sql/mapread2.sql"));
-      driver->prepare(PREPARED_GPS, data_path("/sql/store_gps.sql"));
-
-      int32 gps_session;
+      driver->prepare(PREPARED_GPS, data_path("/sql/set_gps_pos.sql"));
+      driver->prepare(PREPARED_GPS_TOTAL, data_path("/sql/get_gps_total.sql"));
 
 
       // read last gps session ID
@@ -304,7 +357,7 @@ int init_db(mysql_driver* driver)
       if (driver->row_count() == 1)
       {
             driver->fetch();
-            gps_session = driver->get_myint("sessionid")+1;
+            gps_session_id = driver->get_myint("sessid") + 1;
       }
       driver->has_next();
 

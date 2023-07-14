@@ -7,6 +7,7 @@
 #include "db.h"
 
 
+
 struct poly {
 
       int points_count;
@@ -107,6 +108,8 @@ enum gnss_type
 {
       gps, glonass, waas
 };
+extern int32 gps_session_id;
+
 struct own_vessel_class
 {
 private:
@@ -124,7 +127,7 @@ public:
       FloatPoint get_pos()
       {
             if (pos_index)
-                  return  position[pos_index - 1];
+                  return  position[pos_index];
             else return { 0.0,0.0 };
       };
       FloatPoint get_meters()
@@ -135,31 +138,19 @@ public:
       };
       void set_pos(FloatPoint position_gps, position_type_e priority)
       {
-            //if (priority < 0 || priority >= pos_count)                  throw "own_vessel_class: priority index error";
             int32 int_prio = (int32)priority;
             position[int_prio] = position_gps;
-            position_gps.latlon2meter();
             meters[int_prio] = position_gps;
-            int_prio++;
+            meters[int_prio].latlon2meter();
             
-            //mysql->exec_prepared(PREPARED_GPS);
-
-            /*FloatPoint gps = own_vessel.get_meters();
-            mysql->exec_prepared(PREPARED_MAP1,
-                  gps.x + VIEWBOX_RECT.left() * overlap_coeff,
-                  gps.y + VIEWBOX_RECT.bottom() * overlap_coeff,
-                  gps.x + VIEWBOX_RECT.right() * overlap_coeff,
-                  gps.y + VIEWBOX_RECT.top() * overlap_coeff,
-                  cstr);
-            //mysql->free_result();
-            while (mysql->has_next());
-            */
             if (int_prio >= pos_index)
             {
+                  //pchar xxx = bigint2str(utc_ms());
+                 // std::string stringValue = std::to_string(utc_ms());
                   pos_index = int_prio;
+                  mysql->exec_prepared(PREPARED_GPS, std::to_string( utc_ms()).c_str(), gps_session_id, position_gps.x, position_gps.y);
 
             }
-
       };
       /////////////////////////////////////////////////////////////////////////
       inline int32  get_heading() { return heading; }
@@ -177,7 +168,7 @@ public:
       /////////////////////////////////////////////////////////////////////////
       own_vessel_class()
       {
-            pos_index = 0;
+            pos_index = -1;
             _heading_set = 0;
             relative = 0;
       }
@@ -225,7 +216,7 @@ public:
                   list.emplace(c, s);
             }
             s.gnss = gnss_type::glonass;
-            for (c = 65; c <= 89; c++)
+            for (c = 65; c <= 96; c++)
             {
                   list.emplace(c, s);
             }

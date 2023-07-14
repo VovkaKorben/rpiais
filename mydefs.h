@@ -17,6 +17,8 @@
 #include  <cstring>
 #include <sys/stat.h>
 #include <queue>
+#include <chrono>
+
 #define PI 3.141592653589793238462643383279
 #define PI180 PI/180.0
 #define RAD 180/PI
@@ -40,7 +42,7 @@ typedef signed short int16;
 typedef signed short* pint16;
 
 typedef signed long long int64;
-typedef unsigned long long uint64;
+//typedef unsigned long long uint64;
 
 typedef unsigned int ARGB;
 
@@ -85,18 +87,11 @@ inline  std::string data_path(std::string rel_path)
 
 inline uint32 swap32(uint32 v)
 {
-      //  std::cout << std::hex << v << std::endl;
-
-        //v=
       return     (v >> 24) |
             ((v >> 8) & 0x0000FF00) |
             ((v << 8) & 0x00FF0000) |
             (v << 24);
-      //std::cout << std::hex << v << std::endl;
-      //return v;
 }
-
-//using namespace std;
 inline int imin(int v1, int v2)
 {
       if (v1 < v2) return v1; else return v2;
@@ -147,13 +142,18 @@ inline std::string dec2bin(uint32 v, int len = 0)
       }
       return r;
 }
+/*
+inline pchar bigint2str(uint64_t v)
+{
+      char buff[50];
+      double ld = std::log10(v);
+      int32 li = (int32)std::ceil(ld);
+      int32 li = (int32)ld;
 
 
-inline uint64 utc_ms() {
-      struct timespec t;
-      clock_gettime(CLOCK_REALTIME, &t);
-      return t.tv_sec * 1000 + t.tv_nsec / 1000000;
-}
+
+}*/
+
 
 
 inline bool file_exists(const std::string& name) {
@@ -465,6 +465,46 @@ inline void copy_chararray(pchar src, pchar dst, int32  start, int32 cnt) {
             t_src++;
       }
       *t_dst = 0;
+}
+
+
+inline std::string ReplaceString(std::string subject, const std::string& search,
+      const std::string& replace) {
+      size_t pos = 0;
+      while ((pos = subject.find(search, pos)) != std::string::npos) {
+            subject.replace(pos, search.length(), replace);
+            pos += replace.length();
+      }
+      return subject;
+}
+inline uint64_t utc_ms() {
+      /*struct timespec t;
+      clock_gettime(CLOCK_REALTIME, &t);
+      return t.tv_sec * 1000 + t.tv_nsec / 1000000;
+      */
+      using namespace std::chrono;
+      uint64_t ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+      /* auto sec_since_epoch = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+
+       std::cout << "seconds since epoch: " << sec_since_epoch << std::endl;
+       std::cout << "milliseconds since epoch: " << millisec_since_epoch << std::endl;
+       uint64_t ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+       */
+      return ms;
+      //std::cout << ms << " milliseconds since the Epoch\n";
+}
+inline std::string time_diff(uint64_t sec)
+{
+      return string_format("%d:%0.2d:%0.2d", sec / 3600, (sec % 3600) / 60, sec % 60);
+
+      /*if (sec < 60)
+            return string_format("%ds", sec);
+      else
+      {
+            sec /= 60;
+            if (sec < 60)
+                  return string_format("%dm", sec);
+      }*/
 }
 
 #endif

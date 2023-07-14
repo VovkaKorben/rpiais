@@ -20,9 +20,8 @@
 #include <queue>
 
 //const uint64 SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
-const uint64 SHAPES_UPDATE = 10 * 1000;  // 5 min for update shapes
-uint64 next_map_update;
-int32 gps_session_id,gps_points_count;
+const uint64_t SHAPES_UPDATE = 10 * 1000;  // 5 min for update shapes
+uint64_t next_map_update;
 
 
 int32 min_fit, circle_radius;
@@ -260,7 +259,7 @@ int32 load_shapes()
 uint64_t  update_map_data(uint64_t next_check)
 {
       uint64_t ms = utc_ms();
-      if (own_vessel.get_pos_index())
+      if (own_vessel.get_pos_index() != -1)
       {
 
             if (ms > next_check)
@@ -544,15 +543,39 @@ void draw_vessels_info() {
 
 }
 
-void draw_infowindow_global()
+void draw_track_info(int32 x, int32 y)
+{// draw last tracking
+      int32 col_pos[6] = { 0,75,150,250,350 };
+      int32 sessid, time,dist;
+      //uint64_t timestart, timeend;      double dist;
+      // tracks header
+      screen->draw_text(FONT_NORMAL, x + col_pos[1], y, "ID", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, x + col_pos[2], y, "sec", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, x + col_pos[3], y, "dist", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+      y -= 4 + screen->get_font_height(FONT_NORMAL);
+
+      if (mysql->exec_prepared(PREPARED_GPS_TOTAL))
+            return;
+
+      mysql->store();
+      while (mysql->fetch()) {
+            sessid = mysql->get_myint("sessid");
+            time = mysql->get_myint("time");
+            dist = mysql->get_myint("dist");
+
+            screen->draw_text(FONT_NORMAL, x + col_pos[1], y, string_format("#%d", sessid), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, x + col_pos[2], y, time_diff(time), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, x + col_pos[3], y, string_format("%d", dist), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+            y -= 4 + screen->get_font_height(FONT_NORMAL);
+
+      }
+      //      gps_session_id = driver->get_myint("sessid") + 1;
+      mysql->has_next();
+}
+void draw_satellites_info(int32 x, int32 y)
 {
-      int32 col_pos[6] = { 0,25,50,75,100,400 };
-      int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
-
-      // window header
-      screen->draw_text(FONT_MONOMEDIUM, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
-
       // satellite table header      
+      int32 col_pos[6] = { 0,25,50,75,100,400 };
       screen->draw_text(FONT_NORMAL, x + col_pos[1], y, "PRN", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
       screen->draw_text(FONT_NORMAL, x + col_pos[2], y, "El", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
       screen->draw_text(FONT_NORMAL, x + col_pos[3], y, "Az", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
@@ -610,6 +633,17 @@ void draw_infowindow_global()
             screen->draw_text(FONT_NORMAL, x + col_pos[4], y, string_format("%d", s.second.snr), VALIGN_TOP | HALIGN_RIGHT, color, clNone);
             y -= 4 + screen->get_font_height(FONT_NORMAL);
       }
+
+}
+
+void draw_infowindow_global()
+{
+      int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
+      // window header
+      screen->draw_text(FONT_MONOMEDIUM, x, y, "Global Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone);
+      y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
+      draw_track_info(x, y);
+      draw_satellites_info(x + 350, y);
 }
 void draw_timewindow_global()
 {
@@ -679,7 +713,7 @@ void draw_frame()
             //FloatPoint mypos = own_vessel.get_pos();
             //mypos.latlon2meter();
 
-            if (!own_vessel.get_pos_index())
+            if (own_vessel.get_pos_index() == -1)
             {
                   screen->draw_text(FONT_MONOMEDIUM,
                         screen->width() / 2, screen->height() / 2,
@@ -718,7 +752,7 @@ void process_touches() {
       //touchman->check_point(30, 300, gi, name);
       while (touchscr->pop(t))
       {
-            PRINT_STRING(string_format("Touch: %d,%d ... ", t.adjusted[0], t.adjusted[1]));
+            PRINT_STRING(string_format("Touch: %d,%d ... \n", t.adjusted[0], t.adjusted[1]));
             if (touchman->check_point(t.adjusted[0], t.adjusted[1], group_id, area_id))
             {
                   //PRINT_STRING(                  string_format(printf("OK\n");
@@ -877,7 +911,7 @@ void init_video(const char* buff) {
       //screen->draw_text(FONT_LARGE, 100, 100, "XYZ", VALIGN_TOP | HALIGN_LEFT, clRed | clTransparency50, clNone);
 
       screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
-      screen->load_font(FONT_NORMAL, data_path("/img/normal.png"));
+      screen->load_font(FONT_NORMAL, data_path("/img/normal_v2.png"));
       screen->load_font(FONT_MONOMEDIUM, data_path("/img/medium.png"));
       screen->set_font_interval(FONT_MONOMEDIUM, 2);
 
@@ -920,7 +954,8 @@ void init_touch(CSimpleIniA* ini) {
 
       touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
       touchman->add_rect(TOUCH_GROUP_INFOWINDOW, 0, WINDOW_RECT);
-      touchman->set_enabled(0);
+
+      touchman->set_enabled(1); // tmp!!!
 }
 void init_database() {
       mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
@@ -984,7 +1019,7 @@ int main()
             next_map_update = 0;
 
             // simulate info bar click
-            //touchscr->simulate_click(20, 20);
+            touchscr->simulate_click(360, 20);
 
 
             video_loop_start();

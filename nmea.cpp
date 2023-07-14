@@ -276,7 +276,7 @@ _gsa(StringArrayBulk* data, std::string talker)
       std::vector<gnss_type> systems_list = sat.get_gnss_type(&prn_list);
       if (systems_list.size() != 1)
       {
-            printf("[!] GSA: satellites list from more than one system (%d)", systems_list.size());
+            printf("[!] GSA: satellites list from more than one system (%d)\n", systems_list.size());
             return 1;
       }
       sat.reset_used(systems_list[0]); // reset used flag for entire GNSS type
@@ -306,7 +306,7 @@ _gsv(StringArrayBulk* data, std::string talker)
             else {
                   if (sat_count != tmp_count)
                   {
-                        printf("[!] satellites count differ, first message was %d, then %d", sat_count, tmp_count);
+                        printf("[!] GSV: satellites count differ, first message was %d, then %d\n", sat_count, tmp_count);
                   }
             }
 
@@ -341,7 +341,7 @@ _gsv(StringArrayBulk* data, std::string talker)
       {
             if (sat.list.count(s.prn) == 0)
             {
-                  printf("[!] GSV: satellite #%d not found in main list", s.prn);
+                  printf("[!] GSV: satellite #%d not found in main list\n", s.prn);
                   continue;
             }
             sat.list[s.prn].azimuth = s.az;
@@ -620,7 +620,7 @@ int32 parse_nmea(std::string nmea_str)
             if (sentences.count(_sentence) == 0)
                   return (r | NMEA_UNKNOWN_SENTENCE);
 
-#ifndef NDEBUG
+#ifdef NMEA_DUMP
             std::string collect = "";
             for (const auto& a : data)
             {

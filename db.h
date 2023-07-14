@@ -10,27 +10,29 @@
 #define PREPARED_MAP1 1
 #define PREPARED_MAP2 2
 #define PREPARED_GPS 3
-
+#define PREPARED_GPS_TOTAL 4
 
 
 class  mysql_driver
 {
 private:
       MYSQL_ROW row;
-      MYSQL * connection;
-      MYSQL_RES * res;
+      MYSQL* connection;
+      MYSQL_RES* res;
 
       std::map<int, std::string> pstmt;
       std::vector<std::string> fields;
 
-      const char * last_error_str;
+      const char* last_error_str;
       size_t field_index(std::string field_name);
 public:
-      MYSQL * get_connection() { return connection; };
-      const char * get_last_error_str() { return last_error_str; };
+      MYSQL* get_connection() { return connection; };
+      const char* get_last_error_str() { return last_error_str; };
 
-      int get_myint(const size_t index);
-      int get_myint(const std::string field_name);
+      int32 get_myint(const size_t index);
+      int32 get_myint(const std::string field_name);
+      uint64_t get_mybigint(const size_t index);
+      uint64_t get_mybigint(const std::string field_name);
       std::string get_mystr(const size_t index);
       std::string get_mystr(const std::string field_name);
       double get_myfloat(const size_t index);
@@ -56,12 +58,12 @@ public:
 
 
 
-      mysql_driver(const char * host, const char * user, const char * pwd, const char * db);
+      mysql_driver(const char* host, const char* user, const char* pwd, const char* db);
       ~mysql_driver();
 
 };
 //bool load_dicts(mysql_driver * driver);
-int init_db(mysql_driver * driver);
+int init_db(mysql_driver* driver);
 
 
 extern mysql_driver* mysql;
