@@ -31,7 +31,7 @@
 
 
 int32 CENTER_X, CENTER_Y;
-IntPoint CENTER;
+IntPoint VIEWBOX_CENTER;
 
 IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
 ////////////////////////////////////////////////////////////
@@ -176,15 +176,16 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
 
       // creating rects
       CENTER_X = _width / 3, CENTER_Y = _height / 2;
-      CENTER.x = CENTER_X, CENTER.y = CENTER_Y;
-      VIEWBOX_RECT = IntRect{ -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
-      SCREEN_RECT = IntRect{ 0, 0, _width - 1, _height - 1 };
-      SHIPLIST_RECT = IntRect{ CENTER_X * 2, 0,_width - 1, _height - 1 };
+      VIEWBOX_CENTER = { CENTER_X ,CENTER_Y };
+      //CENTER.x = CENTER_X, CENTER.y = CENTER_Y;
+      VIEWBOX_RECT = { -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
+      SCREEN_RECT = { 0, 0, _width - 1, _height - 1 };
+      SHIPLIST_RECT = { CENTER_X * 2, 0, _width - 1, _height - 1 };
       WINDOW_RECT = SCREEN_RECT;
       WINDOW_RECT.collapse(50, 50);
 
       // init fill 
-      et = new bucketset[_height];
+      //et = new bucketset[_height];
       if (ioctl(fbdev, KDSETMODE, KD_GRAPHICS)) {
             perror("ioctl");
             last_error = FB_SET_KDSETMODE_FAILED;
@@ -193,7 +194,7 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
       last_error = FB_NO_ERROR;
 }
 video_driver::~video_driver() {
-      delete[]et;
+      //delete[]et;
       if (!buffer_count)
             free(pix_buf);
       munmap(fb_start, screen_size * buffer_count);
@@ -206,7 +207,7 @@ video_driver::~video_driver() {
 }
 
 ////////////////////////////////////////////////////////////
-inline void video_driver::draw_pix(const int32 x, const int32 y, const ARGB color) {
+void video_driver::draw_pix(const int32 x, const int32 y, const ARGB color) {
       if (x < 0) return;
       if (y < 0) return;
       if (x >= _width) return;
@@ -265,130 +266,6 @@ inline void video_driver::draw_pix(const int32 x, const int32 y, const ARGB colo
 #endif
 #if bpp==32
 #endif
-void video_driver::rectangle(IntRect rct, const ARGB color) {
-      int i;
-      for (i = rct.left(); i <= rct.right(); i++)
-      {
-            draw_pix(i, rct.bottom(), color);
-            draw_pix(i, rct.top(), color);
-      }
-      for (i = rct.bottom() + 1; i < rct.top(); i++)
-      {
-            draw_pix(rct.left(), i, color);
-            draw_pix(rct.right(), i, color);
-      }
-}
-void video_driver::fill_rect(int x0, int y0, int x1, int y1, const ARGB color) {
-      for (int y = y0; y <= y1; y++)
-            for (int x = x0; x <= x1; x++)
-                  draw_pix(x, y, color);
-}
-void video_driver::fill_rect(IntRect rct, const ARGB color) {
-      fill_rect(rct.left(), rct.bottom(), rct.right(), rct.top(), color);
-}
-/*void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
-      int w = x1 - x0;
-      int h = y1 - y0;
-      int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
-      if (w < 0) dx1 = -1; else if (w > 0) dx1 = 1;
-      if (h < 0) dy1 = -1; else if (h > 0) dy1 = 1;
-      if (w < 0) dx2 = -1; else if (w > 0) dx2 = 1;
-      int longest = abs(w);
-      int shortest = abs(h);
-      if (!(longest > shortest)) {
-            longest = abs(h);
-            shortest = abs(w);
-            if (h < 0) dy2 = -1; else if (h > 0) dy2 = 1;
-            dx2 = 0;
-      }
-      int numerator = longest >> 1;
-      for (int i = 0; i <= longest; i++) {
-            draw_pix(x0, y0, color);
-            //putpixel(x, y, color);
-            numerator += shortest;
-            if (!(numerator < longest)) {
-                  numerator -= longest;
-                  x0 += dx1;
-                  y0 += dy1;
-            }
-            else {
-                  x0 += dx2;
-                  y0 += dy2;
-            }
-      }
-}*/
-void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
-{ //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
-      // check line (or part) lies in window
-      //printf("draw_line_fast s: %d, e: %d, y: %d\n", xs, xe, y);
-      if (xe < 0 || xs >= _width) return;
-      if (y < 0 || y >= _height) return;
-
-      // clip start & end to window bounds
-      if (xs < 0) xs = 0;
-      if (xe >= _width) xe = _width - 1;
-
-      xe -= xs;
-      PXPTR addr = pix_buf + (_height - y - 1) * vinfo.xres_virtual + xs;
-#if bpp==16
-      uint16 c = rgb888to565(color);
-      while (xe--)
-            *(addr++) = c;
-#endif
-#if bpp==32
-      while (xe--)
-            *(addr++) = color;
-#endif
-}
-
-void video_driver::draw_image(image* img, int32 x, int32 y, int flags, int transparency)
-{
-      if (!img->is_loaded()) return;
-      if (transparency == 0) return; // nothing draw with zero transparency
-      if ((flags & HALIGN_CENTER) == HALIGN_CENTER)            x -= img->width() / 2;
-      else if ((flags & HALIGN_RIGHT) == HALIGN_RIGHT)            x -= img->width();
-
-      if ((flags & VALIGN_CENTER) == VALIGN_CENTER)            y += img->height() / 2;
-      else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)            y += img->height();
-      //      WARN_FLOATCONVERSION_OFF
-                  //WARN_CONVERSION_OFF
-                  // transparency = 255- transparency ;
-      puint8 src = img->data_ptr();
-      PXPTR dst_start = pix_buf + (_height - y - 1) * vinfo.xres_virtual + x,
-            dst_current;
-      uint8 r, g, b;
-      float a, ia;
-      int tx, ty = img->height();
-
-      while (ty--)
-      {
-            dst_current = dst_start;
-            tx = img->width();
-            while (tx--)
-            {
-                  a = ((*(src + 3)) * transparency) / 65025.0f, ia = 1.0f - a;
-#if bpp==16
-                  r = (*src) * a + ((*dst_current >> 8) & 0xF8) * ia; src++;
-                  g = (*src) * a + ((*dst_current >> 3) & 0xFC) * ia; src++;
-                  b = (*src) * a + ((*dst_current << 3) & 0xF8) * ia; src += 2;
-                  *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
-#endif
-#if bpp==32
-                  r = (*src) * a + ((*dst_current >> 16) & 0xFF) * ia; src++;
-                  g = (*src) * a + ((*dst_current >> 8) & 0xFF) * ia; src++;
-                  b = (*src) * a + (*dst_current & 0xFF) * ia; src += 2;
-                  *dst_current = (r << 16) | (g << 8) | b;
-#endif
-
-
-
-                  dst_current++;
-      }
-            dst_start += vinfo.xres_virtual; // proceed to next line
-}
-      //   WARN_RESTORE            WARN_RESTORE
-
-}
 
 /*void video_driver::_make_circle_cache(const uint32 radius)
 {
@@ -396,285 +273,8 @@ void video_driver::draw_image(image* img, int32 x, int32 y, int flags, int trans
 
 }*/
 
-void video_driver::circle(const IntCircle circle, const ARGB outline, const ARGB fill)
-{
-
-      if (fill != clNone) {
-            int f = 1 - circle.r;
-            int ddF_x = 0;
-            int ddF_y = -2 * circle.r;
-            int x = 0;
-            int y = circle.r;
-
-            draw_line_fast(circle.y, circle.x - circle.r, circle.x + circle.r, fill);
-            draw_pix(circle.x, circle.y + circle.r, fill);
-            draw_pix(circle.x, circle.y - circle.r, fill);
-
-
-
-            while (x < y)
-            {
-                  if (f >= 0)
-                  {
-                        y--;
-                        ddF_y += 2;
-                        f += ddF_y;
-                  }
-                  x++;
-                  ddF_x += 2;
-                  f += ddF_x + 1;
-
-                  draw_line_fast(circle.y + y, circle.x - x, circle.x + x, fill);
-                  draw_line_fast(circle.y - y, circle.x - x, circle.x + x, fill);
-
-                  draw_line_fast(circle.y - x, circle.x - y, circle.x + y, fill);
-                  draw_line_fast(circle.y + x, circle.x - y, circle.x + y, fill);
-
-
-            }
-      }
-      if (outline != clNone) {
-
-            int f = 1 - circle.r;
-            int ddF_x = 0;
-            int ddF_y = -2 * circle.r;
-            int x = 0;
-            int y = circle.r;
-
-
-
-            draw_pix(circle.x - x, circle.y + circle.r, outline);
-            draw_pix(circle.x - x, circle.y - circle.r, outline);
-            draw_pix(circle.x - x + circle.r, circle.y, outline);
-            draw_pix(circle.x - x - circle.r, circle.y, outline);
-
-            while (x < y)
-            {
-                  if (f >= 0)
-                  {
-                        y--;
-                        ddF_y += 2;
-                        f += ddF_y;
-                  }
-                  x++;
-                  ddF_x += 2;
-                  f += ddF_x + 1;
-
-
-                  draw_pix(circle.x + x, circle.y + y, outline);
-                  draw_pix(circle.x - x, circle.y + y, outline);
-                  draw_pix(circle.x + x, circle.y - y, outline);
-                  draw_pix(circle.x - x, circle.y - y, outline);
-                  draw_pix(circle.x + y, circle.y + x, outline);
-                  draw_pix(circle.x - y, circle.y + x, outline);
-                  draw_pix(circle.x + y, circle.y - x, outline);
-                  draw_pix(circle.x - y, circle.y - x, outline);
-            }
-      }
-
-}
-
-
 ////////////////////////////////////////////////////////////
-void _insertionSort(bucketset* b) {
-      double _fx, _s;
-      int j, _y, _ix;
-      for (int i = 1; i < b->cnt; i++)
-      {
-            _y = b->barr[i].y;
-            _fx = b->barr[i].fx;
-            _ix = b->barr[i].ix;
-            _s = b->barr[i].slope;
-            j = i - 1;
-            while ((j >= 0) && (_ix < b->barr[j].ix))
-            {
-                  b->barr[j + 1].y = b->barr[j].y;
-                  b->barr[j + 1].fx = b->barr[j].fx;
-                  b->barr[j + 1].ix = b->barr[j].ix;
-                  b->barr[j + 1].slope = b->barr[j].slope;
-                  j--;
-            }
-            b->barr[j + 1].y = _y;
-            b->barr[j + 1].fx = _fx;
-            b->barr[j + 1].ix = _ix;
-            b->barr[j + 1].slope = _s;
-      }
-}
-void video_driver::edge_tables_reset()
-{
-      aet.cnt = 0;
-      for (int i = 0; i < _height; i++)
-            et[i].cnt = 0;
-}
-void video_driver::edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope)
-{
-      b->barr[b->cnt].y = y_end;
-      b->barr[b->cnt].fx = x_start;
-      b->barr[b->cnt].slope = slope;
-      b->cnt++;
-      //	_insertionSort(b);
 
-}
-void video_driver::edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope)
-{
-      //if (dbg_flag)		cout << string_format("+ Added\ty: %d\tx: %.3f\ts: %.3f\n", y_end, x_start, slope);
-      b->barr[b->cnt].y = y_end;
-      b->barr[b->cnt].fx = x_start;
-      b->barr[b->cnt].ix = int(round(x_start));
-      b->barr[b->cnt].slope = slope;
-      b->cnt++;
-      //	_insertionSort(b);
-
-}
-void video_driver::edge_store_table(IntPoint pt1, IntPoint pt2) {
-      double dx, dy, slope;
-
-      // if both points lies below or above viewable rect - edge skipped
-      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= _height and pt2.y >= _height))
-            return;
-      dy = pt1.y - pt2.y;
-
-      // horizontal lines are not stored in edge table
-      if (dy == 0)
-            return;
-      dx = pt1.x - pt2.x;
-
-      if (is_zero(dx))
-            slope = 0.0;
-      else
-            slope = dx / dy;
-
-      //check if one point lies below view rect - recalculate intersection with zero scanline
-      if (pt1.y < 0)
-      {
-            pt1.x = int(round(pt1.x - pt1.y * slope));
-            pt1.y = 0;
-      }
-      else if (pt2.y < 0)
-      {
-            pt2.x = int(round(pt2.x - pt2.y * slope));
-            pt2.y = 0;
-
-      }
-
-      int _y, sc;
-      double  _x;
-
-      if (dy > 0)
-      {
-            sc = pt2.y;
-            _y = pt1.y;
-            _x = pt2.x;
-      }
-      else
-      {
-            sc = pt1.y;
-            _y = pt2.y;
-            _x = pt1.x;
-      }
-
-
-      //if (sc < 0 || sc >= VIEW_HEIGHT)            throw exception("incorrect scanline");
-      //cout << string_format("Store tuple:\ty: %d->%d\tx: %.3f\ts: %.3f", sc, _y, _x, slope) << endl;
-      edge_store_tuple_float(&et[sc], _y, _x, slope);
-
-
-}
-void video_driver::edge_update_slope(bucketset* b) {
-      for (int i = 0; i < b->cnt; i++)
-      {
-            b->barr[i].fx += b->barr[i].slope;
-            b->barr[i].ix = int(round(b->barr[i].fx));
-      }
-}
-void video_driver::edge_remove_byY(bucketset* b, int scanline_no)
-{
-      int i = 0, j;
-      while (i < b->cnt)
-      {
-            if (b->barr[i].y == scanline_no)
-            {
-                  //if (dbg_flag)				cout << string_format("- Removed\ty: %d\tx: %.3f\n", scanline_no, b->barr[i].x);
-
-                  for (j = i; j < b->cnt - 1; j++)
-                  {
-                        b->barr[j].y = b->barr[j + 1].y;
-                        b->barr[j].fx = b->barr[j + 1].fx;
-                        b->barr[j].ix = b->barr[j + 1].ix;
-                        b->barr[j].slope = b->barr[j + 1].slope;
-
-                  }
-                  b->cnt--;
-            }
-            else
-                  i++;
-      }
-}
-////////////////////////////////////////////////////////////
-void video_driver::calc_fill(const poly* sh) {
-
-      IntPoint prev_point, point;
-      int path_end, point_id = 0;
-      for (int path_id = 0; path_id < sh->path_count; path_id++)
-      {
-            path_end = sh->pathindex[path_id + 1];
-            prev_point = sh->work[path_end - 1];
-            while (point_id < path_end)
-            {
-                  point = sh->work[point_id];
-                  //cout << "Process line: " << point << " -> " << prev_point << endl;
-
-                  edge_store_table(point, prev_point);
-                  prev_point = point;
-                  point_id++;
-            }
-
-      }
-}
-void video_driver::draw_fill(const ARGB color)
-{
-      /*if (dbg_flag)
-      {
-            dump_shapes();
-            print_table();
-      }*/
-
-
-      for (int scanline_no = 0; scanline_no < _height; scanline_no++)
-      {
-            for (int b = 0; b < et[scanline_no].cnt; b++)
-            {
-                  edge_store_tuple_int(
-                        &aet,
-                        et[scanline_no].barr[b].y,
-                        et[scanline_no].barr[b].fx,
-                        et[scanline_no].barr[b].slope);
-
-            }
-
-            edge_remove_byY(&aet, scanline_no);
-            _insertionSort(&aet);
-
-
-            int bucket_no = 0, coordCount = 0, x1, x2;
-            while (bucket_no < aet.cnt)
-            {
-                  if ((coordCount % 2) == 0)
-                        x1 = aet.barr[bucket_no].ix;
-                  else
-                  {
-                        x2 = aet.barr[bucket_no].ix;
-                        draw_line_fast(scanline_no, x1, x2, color);
-
-                  }
-                  coordCount++;
-                  bucket_no++;
-            }
-
-            edge_update_slope(&aet);
-      }
-
-}
 
 typedef int OutCode;
 
@@ -776,7 +376,8 @@ void video_driver::draw_line_v2(const IntPoint pt1, const IntPoint pt2, const AR
             else { x1 += dx2;                  y1 += dy2; }
       }
 }
-void video_driver::draw_outline_v2(const poly* sh, const ARGB color)
+/*
+void video_driver::draw_outline_v2(const Poly* sh, const ARGB color)
 {
       IntPoint* prev_point, * point;
       int path_end, point_id = 0;
@@ -794,22 +395,8 @@ void video_driver::draw_outline_v2(const poly* sh, const ARGB color)
                   point_id++;
             }
       }
-}
+}*/
 ////////////////////////////////////////////////////////////
-void video_driver::draw_shape(const poly* sh, const ARGB fill_color, const ARGB outline_color)
-{
-      if (fill_color != clNone)
-      {
-
-            edge_tables_reset();
-            calc_fill(sh);
-            draw_fill(fill_color);
-      }
-      if (outline_color != clNone)
-      {
-            draw_outline_v2(sh, outline_color);
-      }
-}
 bool video_driver::load_font(const int index, const std::string filename)
 {
       if (fonts.count(index) != 0)
@@ -832,7 +419,10 @@ int32 video_driver::set_font_interval(const int32 font_index, const int32 font_i
       fonts[font_index].set_interval(font_interval);
       return 0;
 }
-void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32 flags, const ARGB black_swap, const ARGB white_swap, bool dbg)
+void video_driver::draw_text(const int32 font_index, IntPoint pt, const std::string s, const uint32 flags, const ARGB black_swap, const ARGB white_swap) {
+      draw_text(font_index, pt.x, pt.y, s, flags, black_swap, white_swap);
+}
+void video_driver::draw_text(const int32 font_index, int32 x, int32 y, const std::string s, const uint32 flags, const ARGB black_swap, const ARGB white_swap)
 //void video_driver::draw_text(int font_index, int x, int y, std::string s, const ARGB color, int flags)
 {
       if (fonts.count(font_index) == 0)
@@ -841,7 +431,7 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
       // detect text dimensions
       int overall_width = 0, overall_count = 0;
       char_info_s* ch_info;
-      for (char& c : s) {
+      for (const char& c : s) {
             ch_info = fonts[font_index].get_char_info(c);
             if (ch_info)
             {
@@ -869,7 +459,7 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
       puint32 data;
       uint32 font_pix, clr, tmp_alpha;
       //ARGB temp_color, paste_color = color & 0xFFFFFF;
-      for (char& c : s) {
+      for (const char& c : s) {
 
             if (x >= _width) return; // go away if next char outside screen
 
@@ -932,3 +522,223 @@ void video_driver::draw_text(int font_index, int x, int y, std::string s, uint32
       }
 
 }
+
+//void video_driver::draw_circle(IntPoint center, int32 radius, const ARGB outline, const ARGB fill) {
+//      draw_circle({ center.x,center.y,radius }, outline, fill);
+//}
+void video_driver::draw_circle(const IntCircle circle, const ARGB outline, const ARGB fill) {
+
+      if (fill != clNone) {
+            int f = 1 - circle.r;
+            int ddF_x = 0;
+            int ddF_y = -2 * circle.r;
+            int x = 0;
+            int y = circle.r;
+
+            draw_line_fast(circle.y, circle.x - circle.r, circle.x + circle.r, fill);
+            draw_pix(circle.x, circle.y + circle.r, fill);
+            draw_pix(circle.x, circle.y - circle.r, fill);
+
+
+
+            while (x < y)
+            {
+                  if (f >= 0)
+                  {
+                        y--;
+                        ddF_y += 2;
+                        f += ddF_y;
+                  }
+                  x++;
+                  ddF_x += 2;
+                  f += ddF_x + 1;
+
+                  draw_line_fast(circle.y + y, circle.x - x, circle.x + x, fill);
+                  draw_line_fast(circle.y - y, circle.x - x, circle.x + x, fill);
+
+                  draw_line_fast(circle.y - x, circle.x - y, circle.x + y, fill);
+                  draw_line_fast(circle.y + x, circle.x - y, circle.x + y, fill);
+
+
+            }
+      }
+      if (outline != clNone) {
+
+            int f = 1 - circle.r;
+            int ddF_x = 0;
+            int ddF_y = -2 * circle.r;
+            int x = 0;
+            int y = circle.r;
+
+
+
+            draw_pix(circle.x - x, circle.y + circle.r, outline);
+            draw_pix(circle.x - x, circle.y - circle.r, outline);
+            draw_pix(circle.x - x + circle.r, circle.y, outline);
+            draw_pix(circle.x - x - circle.r, circle.y, outline);
+
+            while (x < y)
+            {
+                  if (f >= 0)
+                  {
+                        y--;
+                        ddF_y += 2;
+                        f += ddF_y;
+                  }
+                  x++;
+                  ddF_x += 2;
+                  f += ddF_x + 1;
+
+
+                  draw_pix(circle.x + x, circle.y + y, outline);
+                  draw_pix(circle.x - x, circle.y + y, outline);
+                  draw_pix(circle.x + x, circle.y - y, outline);
+                  draw_pix(circle.x - x, circle.y - y, outline);
+                  draw_pix(circle.x + y, circle.y + x, outline);
+                  draw_pix(circle.x - y, circle.y + x, outline);
+                  draw_pix(circle.x + y, circle.y - x, outline);
+                  draw_pix(circle.x - y, circle.y - x, outline);
+            }
+      }
+
+}
+void video_driver::rectangle(IntRect rct, const ARGB color) {
+      int i;
+      for (i = rct.left(); i <= rct.right(); i++)
+      {
+            draw_pix(i, rct.bottom(), color);
+            draw_pix(i, rct.top(), color);
+      }
+      for (i = rct.bottom() + 1; i < rct.top(); i++)
+      {
+            draw_pix(rct.left(), i, color);
+            draw_pix(rct.right(), i, color);
+      }
+}
+void video_driver::fill_rect(int32 x0, int32 y0, int32 x1, int32 y1, const ARGB color) {
+      for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                  draw_pix(x, y, color);
+}
+void video_driver::fill_rect(IntRect rct, const ARGB color) {
+      fill_rect(rct.left(), rct.bottom(), rct.right(), rct.top(), color);
+}
+/*void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
+      int w = x1 - x0;
+      int h = y1 - y0;
+      int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+      if (w < 0) dx1 = -1; else if (w > 0) dx1 = 1;
+      if (h < 0) dy1 = -1; else if (h > 0) dy1 = 1;
+      if (w < 0) dx2 = -1; else if (w > 0) dx2 = 1;
+      int longest = abs(w);
+      int shortest = abs(h);
+      if (!(longest > shortest)) {
+            longest = abs(h);
+            shortest = abs(w);
+            if (h < 0) dy2 = -1; else if (h > 0) dy2 = 1;
+            dx2 = 0;
+      }
+      int numerator = longest >> 1;
+      for (int i = 0; i <= longest; i++) {
+            draw_pix(x0, y0, color);
+            //putpixel(x, y, color);
+            numerator += shortest;
+            if (!(numerator < longest)) {
+                  numerator -= longest;
+                  x0 += dx1;
+                  y0 += dy1;
+            }
+            else {
+                  x0 += dx2;
+                  y0 += dy2;
+            }
+      }
+}*/
+void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
+{ //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
+      // check line (or part) lies in window
+      //printf("draw_line_fast s: %d, e: %d, y: %d\n", xs, xe, y);
+      if (xe < 0 || xs >= _width) return;
+      if (y < 0 || y >= _height) return;
+
+      // clip start & end to window bounds
+      if (xs < 0) xs = 0;
+      if (xe >= _width) xe = _width - 1;
+
+      xe -= xs;
+      PXPTR addr = pix_buf + (_height - y - 1) * vinfo.xres_virtual + xs;
+#if bpp==16
+      uint16 c = rgb888to565(color);
+      while (xe--)
+            *(addr++) = c;
+#endif
+#if bpp==32
+      while (xe--)
+            *(addr++) = color;
+#endif
+}
+void video_driver::draw_image(image* img, int32 x, int32 y, int32 flags, int32 transparency)
+{
+      if (!img->is_loaded()) return;
+      if (transparency == 0) return; // nothing draw with zero transparency
+      if ((flags & HALIGN_CENTER) == HALIGN_CENTER)            x -= img->width() / 2;
+      else if ((flags & HALIGN_RIGHT) == HALIGN_RIGHT)            x -= img->width();
+
+      if ((flags & VALIGN_CENTER) == VALIGN_CENTER)            y += img->height() / 2;
+      else   if ((flags & VALIGN_BOTTOM) == VALIGN_BOTTOM)            y += img->height();
+      //      WARN_FLOATCONVERSION_OFF
+                  //WARN_CONVERSION_OFF
+                  // transparency = 255- transparency ;
+      puint8 src = img->data_ptr();
+      PXPTR dst_start = pix_buf + (_height - y - 1) * vinfo.xres_virtual + x,
+            dst_current;
+      uint8 r, g, b;
+      float a, ia;
+      int tx, ty = img->height();
+
+      while (ty--)
+      {
+            dst_current = dst_start;
+            tx = img->width();
+            while (tx--)
+            {
+                  a = ((*(src + 3)) * transparency) / 65025.0f, ia = 1.0f - a;
+#if bpp==16
+                  r = (*src) * a + ((*dst_current >> 8) & 0xF8) * ia; src++;
+                  g = (*src) * a + ((*dst_current >> 3) & 0xFC) * ia; src++;
+                  b = (*src) * a + ((*dst_current << 3) & 0xF8) * ia; src += 2;
+                  *dst_current = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+#endif
+#if bpp==32
+                  r = (*src) * a + ((*dst_current >> 16) & 0xFF) * ia; src++;
+                  g = (*src) * a + ((*dst_current >> 8) & 0xFF) * ia; src++;
+                  b = (*src) * a + (*dst_current & 0xFF) * ia; src += 2;
+                  *dst_current = (r << 16) | (g << 8) | b;
+#endif
+
+
+
+                  dst_current++;
+            }
+            dst_start += vinfo.xres_virtual; // proceed to next line
+      }
+      //   WARN_RESTORE            WARN_RESTORE
+
+}
+
+/*
+void video_driver::draw_shape(const Poly* sh, const ARGB fill_color, const ARGB outline_color)
+{
+      if (fill_color != clNone)
+      {
+
+            edge_tables_reset();
+            calc_fill(sh);
+            draw_fill(fill_color);
+      }
+      if (outline_color != clNone)
+      {
+            draw_outline_v2(sh, outline_color);
+      }
+}
+*/

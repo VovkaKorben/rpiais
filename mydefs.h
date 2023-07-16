@@ -20,6 +20,14 @@
 #include <chrono>
 
 #define PI 3.141592653589793238462643383279
+
+#define RAD0 0.0
+#define RAD90 PI/2
+#define RAD180 PI
+#define RAD270 PI*1.5
+#define RAD360 PI*2
+
+//#define PIM2 PI*2#define PID2 PI/2
 #define PI180 PI/180.0
 #define RAD 180/PI
 #define EARTH_RADIUS 6371008.8 // used by haversine
@@ -161,6 +169,7 @@ inline bool file_exists(const std::string& name) {
       return (stat(name.c_str(), &buffer) == 0);
 }
 //struct  FloatPoint;
+/*
 struct  IntPoint
 {
       int32 x, y;
@@ -192,6 +201,7 @@ struct  IntPoint
       }
 
 };
+
 struct  FloatPoint
 {
 
@@ -271,6 +281,7 @@ struct  FloatPoint
             return int(round(y));
       }
 };
+
 struct IntCircle
 {
       int32 x, y;
@@ -278,7 +289,7 @@ struct IntCircle
 };
 struct IntRect {
 private:
-      int x1, y1, x2, y2;
+      int32 x1, y1, x2, y2;
 public:
 
       int left() { return x1; }
@@ -310,7 +321,7 @@ public:
       }
       inline bool is_intersect(IntRect rct)
       {
-            return ((x1 < rct.x2) && (rct.x1 < x2) && (y1 < rct.y2) && (rct.y1 < y2));
+            return ((x1 < rct.x2) && (rct.right < x2) && (y1 < rct.y2) && (rct.top < y2));
       }
       int get_width() { return x2 - x1; }
       int get_height() { return y2 - y1; }
@@ -332,14 +343,7 @@ public:
             x1 += w; x2 -= w;
             y1 += h; y2 -= h;
       }
-      /* void offset(int x, int y)
-       {
-       }
-       void offset(IntPoint pt)
-       {
-             (pt.x, pt.y);
-       }
-       */
+
 };
 struct frect {
       double x1, y1, x2, y2;
@@ -356,7 +360,7 @@ struct frect {
             }
       }
 };
-
+*/
 template<typename ... Args> inline std::string string_format(const std::string& format, Args ... args)
 {
       int size_s = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'

@@ -6,40 +6,119 @@
 #include "mydefs.h"
 #include "db.h"
 
+//  forward declarations
+struct  IntPoint;
+struct  FloatPoint;
 
-
-struct poly {
-
-      int points_count;
-      FloatPoint* origin;
-      IntPoint* work;
-      uint64_t last_access;
-
-      int path_count;
-      frect bounds;
-      int* pathindex;
-
-      poly()
-      {
-            points_count = 0;
-      }
+// points
+struct PolarPoint
+{
+      double angle, dist;
+      void from_float(FloatPoint* fp);
+      void add(PolarPoint pp);
+      IntPoint to_int();
+      void zoom(double z);
+      void rotate(double a);
+};
+struct  FloatPoint {
+      double x, y;
+      FloatPoint latlon2meter();
+      IntPoint to_int();
+      void substract(FloatPoint fp);
+      PolarPoint to_polar();
+      int32 haversine(FloatPoint fp);
+};
+struct IntPoint
+{
+      int32 x, y;
+      PolarPoint to_polar();
+      IntPoint transform(PolarPoint pp);
+      void add(IntPoint pt);
+      void add(int32 x, int32 y);
 };
 
+//rects
+struct IntRect
+{
+//private:
+      int32 l,b,r,t;
+      int32 _get_coord(int32 index);
+//public:
+      int32 left() { return l; }
+      int32 bottom() { return b; }
+      int32 right() { return r; }
+      int32 top() { return t; }
+
+      void init(int32 x, int32 y);
+      void modify(int32 x, int32 y);
+      void make(int32 left, int32 bottom, int32 right, int32 top);
+      bool is_intersect(IntRect* rct);
+      IntRect transform(PolarPoint pp);
+      //IntRect() {};
+      //IntRect(int32 l, int32 b, int32 r, int32 t);
+      void collapse( int32 x,  int32 y);
+      IntPoint center();
+};
+struct FloatRect
+{
+      double x0, y0, x1, y1;
+};
+
+#define max_vertices 500
+struct bucket {
+      int y, ix;
+      double fx, slope;
+};
+struct bucketset {
+      int cnt;
+      bucket barr[max_vertices];
+};
+struct Poly {
+private:
+      static bucketset aet, * et;
+      void edge_tables_reset();
+      void edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope);
+      void edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope);
+      void edge_store_table(IntPoint pt1, IntPoint pt2);
+      void edge_update_slope(bucketset* b);
+      void edge_remove_byY(bucketset* b, int scanline_no);
+      void calc_fill(const Poly* sh);
+      void draw_fill(const ARGB color);
+      //FloatRect float_bounds;
+      IntRect bounds;
+      //int32 points_count;
+public:
+      std::vector<FloatPoint> origin;
+      std::vector<IntPoint> work;
+      std::vector<int32> path_ptr;
+      void add_point(double x, double y);
+      void add_path();
+      IntRect get_bounds();
+      IntRect get_bounds(PolarPoint pp);
+      //IntRect get_bounds();
+      IntRect transform_bounds(PolarPoint pp);
+      void transform(PolarPoint pp, FloatPoint offset = { 0.0,0.0 });
+      Poly();
+};
+struct IntCircle {
+      int32 x, y, r;
+};
 
 enum class mid_types
 {
       diverradio, ships, groupships, coaststation, saraircraft, aidtonav, auxship, aissart, mobdevice, epirb
 };
 
-struct vessel :poly
+struct vessel
 {
 public:
       uint32  imo, accuracy, status, heading, shiptype, top, bottom, left, right, mid;
       mid_types mid_type;
+      uint64_t last_access;
       int distance;
       double  turn, speed, course;
       std::string shipname, callsign;
-      poly figure;
+      Poly shape;
       bool size_ok, pos_ok, angle_ok;
       FloatPoint gps;
       void eval_mid(uint32 mmsi)
@@ -71,31 +150,26 @@ public:
             pos_ok = false;
 
             shipname = "";
-
-
-#ifdef __GNUC__ //GNU_C_compiler
-
-
-
             last_access = utc_ms();
-#endif
 
-            points_count = 5;
-            origin = new FloatPoint[5];
-            work = new IntPoint[5];
+            /*points_count = 5;
+            origin = new FloatPoint2[5];
+            work = new IntPoint2[5];
 
             path_count = 1;
             pathindex = new int[2];
             pathindex[0] = 0;
-            pathindex[1] = 5;
+            pathindex[1] = 5;*/
       }
       void size_changed() {
-            double l = left, r = right, t = top, b = bottom;
-            origin[0] = { t,(l + r) / 2 - r }; // bow center
-            origin[1] = { (t + b) * 0.75 - b,l }; // bow left connector
-            origin[2] = { -b, l }; // left bottom point
-            origin[3] = { -b, -r }; // right bottom point
-            origin[4] = { (t + b) * 0.75 - b,-r };// bow right connector
+            // boat direction to 0 degrees forward
+           // double l = left, r = right, t = top, b = bottom;
+            shape.add_path();
+            shape.add_point(top, (left + right) / 2 - right); // bow center
+            shape.add_point((top + bottom) * 0.75 - bottom, left); // bow left connector
+            shape.add_point(-bottom, left); // left bottom point
+            shape.add_point(-bottom, -right); // right bottom point
+            shape.add_point((top + bottom) * 0.75 - bottom, -right);// bow right connector
       }
 };
 
@@ -126,14 +200,14 @@ public:
       /////////////////////////////////////////////////////////////////////////
       FloatPoint get_pos()
       {
-            if (pos_index)
+            if (pos_index >= 0)
                   return  position[pos_index];
             else return { 0.0,0.0 };
       };
       FloatPoint get_meters()
       {
-            if (pos_index)
-                  return  meters[pos_index - 1];
+            if (pos_index >= 0)
+                  return  meters[pos_index];
             else return { 0.0,0.0 };
       };
       void set_pos(FloatPoint position_gps, position_type_e priority)
@@ -142,13 +216,13 @@ public:
             position[int_prio] = position_gps;
             meters[int_prio] = position_gps;
             meters[int_prio].latlon2meter();
-            
+
             if (int_prio >= pos_index)
             {
                   //pchar xxx = bigint2str(utc_ms());
                  // std::string stringValue = std::to_string(utc_ms());
                   pos_index = int_prio;
-                  mysql->exec_prepared(PREPARED_GPS, std::to_string( utc_ms()).c_str(), gps_session_id, position_gps.x, position_gps.y);
+                  mysql->exec_prepared(PREPARED_GPS, std::to_string(utc_ms()).c_str(), gps_session_id, position_gps.x, position_gps.y);
 
             }
       };
@@ -160,7 +234,7 @@ public:
             _heading_set = 1;
       };
       /////////////////////////////////////////////////////////////////////////
-      inline int32  get_relative() { return relative; }
+      inline int32  is_relative() { return relative; }
       void set_relative()
       {
             relative ^= 1;
@@ -279,10 +353,14 @@ public:
       }
 };
 
+struct map_shape {
+      uint64_t last_access;
+      Poly shape;
+};
 
-//extern 
+extern std::map <int32, map_shape>  map_shapes;
 extern own_vessel_class own_vessel;
-extern std::map<int, vessel> vessels;
+extern std::map<int32, vessel> vessels;
 extern satellites sat;
 
 #endif

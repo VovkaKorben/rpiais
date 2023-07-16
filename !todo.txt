@@ -26,4 +26,6 @@
 
    // offset MYPOS from gps center to geometrical boat center
 
-- сделать в шрифте цифры monospaced
++ сделать в шрифте цифры monospaced
+- время восхода и захода солнца
+- посмотреть есть ли возможность показа временной зоны

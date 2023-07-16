@@ -468,7 +468,7 @@ void touch_manager::debug(video_driver* scr) {
                               break;
                         }
                         case TOUCH_TYPE_CIRCLE: {
-                              scr->circle({ tmp.coords[0], tmp.coords[1],(uint32)tmp.coords[2] }, clr, clNone);
+                              scr->draw_circle({ tmp.coords[0], tmp.coords[1],(uint32)tmp.coords[2] }, clr, clNone);
                               break;
                         }
                   }
