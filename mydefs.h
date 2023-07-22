@@ -364,13 +364,24 @@ struct frect {
 template<typename ... Args> inline std::string string_format(const std::string& format, Args ... args)
 {
       int size_s = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
-      if (size_s <= 0) { throw std::runtime_error("string_format: error during formatting."); }
+      if (size_s <= 0) { throw std::runtime_error("string_format: error during formatting.\n"); }
       auto size = static_cast<size_t>(size_s);
       std::unique_ptr<char[]> buf(new char[size]);
       std::snprintf(buf.get(), size, format.c_str(), args ...);
       return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
 }
-
+template<typename ... Args> inline std::string string_format2(const std::string& format, Args ... args)
+{
+      size_t size = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
+      if (size <= 0) {
+            throw std::runtime_error("string_format: error during formatting.\n"); 
+      }
+      char buff[size];
+      std::snprintf(buff, size, format.c_str(), args ...);
+      std::string r = std::string(buff,size-1);
+      return r;
+   //   return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
+}
 
 inline std::string read_file(std::string filename) {
       std::ifstream f(filename); //taking file as inputstream

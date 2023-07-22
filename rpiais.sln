@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "touchcal", "touchcal\touchc
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ublox", "..\ublox\ublox.vcxproj", "{CE4A5DFD-D5A0-43C6-AFE1-B79230491DDB}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vincenty", "..\tmp\vincenty\vincenty\vincenty.vcxproj", "{D1518A42-8D0E-477B-9CD8-DD2998958681}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM = Debug|ARM
@@ -171,6 +173,30 @@ Global
 		{CE4A5DFD-D5A0-43C6-AFE1-B79230491DDB}.Release|x86.ActiveCfg = Release|x86
 		{CE4A5DFD-D5A0-43C6-AFE1-B79230491DDB}.Release|x86.Build.0 = Release|x86
 		{CE4A5DFD-D5A0-43C6-AFE1-B79230491DDB}.Release|x86.Deploy.0 = Release|x86
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|ARM.ActiveCfg = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|ARM.Build.0 = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|ARM64.ActiveCfg = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|ARM64.Build.0 = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|RasPi ARM64.ActiveCfg = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|RasPi ARM64.Build.0 = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|VM x64.ActiveCfg = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|VM x64.Build.0 = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|x64.ActiveCfg = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|x64.Build.0 = Debug|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|x86.ActiveCfg = Debug|Win32
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Debug|x86.Build.0 = Debug|Win32
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|ARM.ActiveCfg = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|ARM.Build.0 = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|ARM64.ActiveCfg = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|ARM64.Build.0 = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|RasPi ARM64.ActiveCfg = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|RasPi ARM64.Build.0 = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|VM x64.ActiveCfg = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|VM x64.Build.0 = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|x64.ActiveCfg = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|x64.Build.0 = Release|x64
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|x86.ActiveCfg = Release|Win32
+		{D1518A42-8D0E-477B-9CD8-DD2998958681}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

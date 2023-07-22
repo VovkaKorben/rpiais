@@ -19,6 +19,8 @@
 #include <queue>
 #include "ais_types.h"
 
+
+
 //const uint64 SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
 const uint64_t SHAPES_UPDATE = 10 * 1000;  // 5 min for update shapes
 uint64_t next_map_update;
@@ -144,114 +146,56 @@ int32 load_shapes()
 {
       //double overlap_coeff = 1.05 * ZOOM_RANGE[max_zoom_index - 1];
       double overlap_coeff = 5.0;// 0.05 * ZOOM_RANGE[max_zoom_index - 1];
-      int shapes_total = 0, points_total = 0;
+      int32 shapes_total = 0, points_total = 0;
 
-      // create string with existing id's
-      std::stringstream sstr;
 
-      if (map_shapes.size()) {
-            int total = 0;
-            sstr << " and recid not in(";
-            for (std::map<int32, map_shape>::iterator iter = map_shapes.begin(); iter != map_shapes.end(); ++iter)
-            {
-                  if (total++ != 0)
-                        sstr << ",";
-                  sstr << iter->first;
 
-            }
-            sstr << ")";
+      FloatRect query_coords(VIEWBOX_RECT);
+      query_coords.zoom(overlap_coeff);
+      query_coords.offset(own_vessel.get_meters());
+      mysql->exec_prepared(PREPARED_MAP_READ,
+            query_coords.left(),
+            query_coords.bottom(),
+            query_coords.right(),
+            query_coords.top());
 
-            //  sstr.seekg(0, ios::end);            int size = sstr.tellg();
+      //      while (mysql->has_next());
 
-      }
-      const std::string& tmp = sstr.str();
-      const char* cstr = tmp.c_str();
+    //  mysql->store();
 
-      // IntRect tmp = VIEWBOX_RECT;
-      FloatPoint gps = own_vessel.get_meters();
-      /*  mysql->exec_prepared(PREPARED_MAP1,
-              gps.x + VIEWBOX_RECT.left() * overlap_coeff,
-              gps.y + VIEWBOX_RECT.bottom() * overlap_coeff,
-              gps.x + VIEWBOX_RECT.right() * overlap_coeff,
-              gps.y + VIEWBOX_RECT.top() * overlap_coeff,
-              cstr);
-              */
-              //mysql->free_result();
-      while (mysql->has_next());
-
-      mysql->exec_prepared(PREPARED_MAP2);
-      mysql->store();
       // fetching shapes
-      //poly shape;
-      int recid;
+      Poly* poly;
+      int32 rec_id, part_id, prev_part_id;
+      //int32 prev_rec_id = -1;
+      FloatPoint coords;
       while (mysql->fetch())
       {
+            rec_id = mysql->get_myint("recid");
 
-            /*
-                        shape.bounds.right = mysql->get_myfloat("minx");
-                        shape.bounds.top = mysql->get_myfloat("miny");
-                        shape.bounds.x2 = mysql->get_myfloat("maxx");
-                        shape.bounds.y2 = mysql->get_myfloat("maxy");
+            // check shape already exists
+            if (map_shapes.count(rec_id) == 0)
+            {
+                  //map_shapes.emplace(recid, Poly());
+                  map_shapes.emplace(std::piecewise_construct, std::forward_as_tuple(rec_id), std::forward_as_tuple());
+                  map_shapes[rec_id].last_access = utc_ms();
+                  poly = &map_shapes[rec_id].shape;
+                  prev_part_id = -1;
+                  shapes_total++;
+            }
 
-
-                        shape.path_count = mysql->get_myint("parts");
-                        shape.pathindex = new int[shape.path_count + 1];
-                        shape.points_count = mysql->get_myint("points");
-                        shape.pathindex[shape.path_count] = shape.points_count; // set closing point
-                        shape.origin = new FloatPoint[shape.points_count];
-                        shape.work = new IntPoint[shape.points_count];
-
-                        recid = mysql->get_myint("recid");
-                        shapes[recid] = shape;
-
-                        shapes_total++;
-                        */
+            // check for new part started
+            part_id = mysql->get_myint("partid");
+            if (part_id != prev_part_id)
+            {
+                  poly->add_path();
+                  prev_part_id = part_id;
+            }
+            coords.x = mysql->get_myfloat("x");
+            coords.y = mysql->get_myfloat("y");
+            poly->add_point(coords);
+            points_total++;
       }
-
-      mysql->free_result();
-      if (!mysql->has_next())
-            return 1;
-      mysql->store();
-
-      // read points
-      int prev_recid = -1;
-      int partid, prev_partid;
-      int curr_path_index, curr_point_index;
-
-      //poly * sh = nullptr;
-      while (mysql->fetch())
-      {
-
-            /*
-            recid = mysql->get_myint("recid");
-               if (recid != prev_recid)
-               {
-                     prev_recid = recid;
-                     //sh = &shapes[recid];
-                     prev_partid = -1;
-                     curr_point_index = 0;
-                     curr_path_index = 0;
-               }
-
-               partid = mysql->get_myint("partid");
-               if (partid != prev_partid)
-               {
-                     // add path start
-                     prev_partid = partid;
-                     shapes[recid].pathindex[curr_path_index++] = curr_point_index;
-               }
-               shapes[recid].origin[curr_point_index++] = {
-                     mysql->get_myfloat("x"),
-                     mysql->get_myfloat("y")
-               };
-
-               points_total++;
-               */
-      }
-
-      mysql->free_result();
-      mysql->has_next();
-
+      
       std::cout << "Shapes loaded: " << shapes_total << std::endl;
       std::cout << "Points added: " << points_total << std::endl;
       return 0;
@@ -473,8 +417,8 @@ void draw_vessels_info() {
       screen->fill_rect(SHIPLIST_RECT, 0x30FFFFFF);
 
       // get all MMSI to vector + alculate distance
-      std::vector<int> mmsi;
-      for (std::map<int, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {
+      std::vector<int32> mmsi;
+      for (std::map<int32, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {
 
             if (it->second.pos_ok)
                   it->second.distance = it->second.gps.haversine(own_vessel.get_pos());
@@ -497,7 +441,7 @@ void draw_vessels_info() {
 
       // draw ship list
       touchman->clear_group(TOUCH_GROUP_SHIPLIST);
-      int32 lines_count;// = imin((int)mmsi.size(), y_coord / LINE_HEIGHT),
+      int32 lines_count = imin((int32)mmsi.size(), y_coord / LINE_HEIGHT);
       int32 mid;
       for (int i = 0; i < lines_count; i++)
       {
@@ -558,7 +502,7 @@ void draw_track_info(int32 x, int32 y)
       if (mysql->exec_prepared(PREPARED_GPS_TOTAL))
             return;
 
-      mysql->store();
+      
       while (mysql->fetch()) {
             sessid = mysql->get_myint("sessid");
             time = mysql->get_myint("time");
@@ -571,7 +515,7 @@ void draw_track_info(int32 x, int32 y)
 
       }
       //      gps_session_id = driver->get_myint("sessid") + 1;
-      mysql->has_next();
+      
 }
 void draw_satellites_info(int32 x, int32 y)
 {
@@ -952,8 +896,8 @@ void init_touch(CSimpleIniA* ini) {
       //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
 
       touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
-    //  touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),CENTER_X ,40 });
-//      touchman->add_rect(TOUCH_GROUP_INFOLINE, 1, { CENTER_X,SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
+      //  touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),CENTER_X ,40 });
+  //      touchman->add_rect(TOUCH_GROUP_INFOLINE, 1, { CENTER_X,SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
 
       touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
       touchman->add_rect(TOUCH_GROUP_INFOWINDOW, 0, WINDOW_RECT);
@@ -962,12 +906,16 @@ void init_touch(CSimpleIniA* ini) {
 }
 void init_database() {
       mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
-      if (mysql->get_last_error_str()) {
+      init_db(mysql);
+      //mysql->exec_file(data_path("/sql/test/test.sql"));
+
+      /*if (mysql->get_last_error_str()) {
             printf("mysql init error.\n%s\n", mysql->get_last_error_str());
             return;
 
       }
-      init_db(mysql);
+      
+      */
 }
 
 /*
@@ -1030,16 +978,32 @@ int main()
             video_loop_start();
             return 0;
       }
-      catch (const char* exception) // обработчик исключений типа const char*
+
+
+      catch (sql::SQLException& e) {
+            std::cout << "# ERR: SQLException in " << __FILE__;
+            std::cout << "(" << __FUNCTION__ << ") on line " << __LINE__ << std::endl;
+            std::cout << "# ERR: " << e.what();
+            std::cout << " (MySQL error code: " << e.getErrorCode();
+            std::cout << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+      }
+      catch (const std::runtime_error& re)
       {
-            std::cerr << "Error: " << exception << '\n';
+            // speciffic handling for runtime_error
+            std::cerr << "[E] Runtime error: " << re.what() << std::endl;
       }
-      catch (char* e) {
-            std::cerr << "[EXCEPTION] " << e << std::endl;
-            return false;
+      catch (const std::exception& ex)
+      {
+            // speciffic handling for all exceptions extending std::exception, except
+            // std::runtime_error which is handled explicitly
+            std::cerr << "[E] Error occurred: " << ex.what() << std::endl;
       }
-      catch (...) {
-            std::cerr << "[E] " << std::endl;
+      catch (...)
+      {
+            // catch any other errors (that we have no information about)
+            std::cerr << "[E] Unknown failure occurred. Possible memory corruption" << std::endl;
       }
+
+
       return 0;
 }

@@ -91,8 +91,9 @@ private:
 
       //void draw_outline(const poly * sh, const ARGB color);
 
-      void draw_line_fast(int y, int xs, int xe, const ARGB color);
+      
 public:
+      void draw_line_fast(int y, int xs, int xe, const ARGB color);
       void draw_line_v2(const IntPoint pt1, const IntPoint pt2, const ARGB color);
       void draw_outline_v2(const Poly* sh, const ARGB color);
       void flip();
@@ -128,5 +129,5 @@ public:
       void video_loop_start();
 };
 
-video_driver* screen;
+extern video_driver* screen;
 #endif

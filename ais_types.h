@@ -22,7 +22,7 @@ struct PolarPoint
 };
 struct  FloatPoint {
       double x, y;
-      FloatPoint latlon2meter();
+      void latlon2meter();
       IntPoint to_int();
       void substract(FloatPoint fp);
       PolarPoint to_polar();
@@ -40,28 +40,40 @@ struct IntPoint
 //rects
 struct IntRect
 {
-//private:
-      int32 l,b,r,t;
+      //private:
+      int32 l, b, r, t;
       int32 _get_coord(int32 index);
-//public:
+      //public:
       int32 left() { return l; }
       int32 bottom() { return b; }
       int32 right() { return r; }
       int32 top() { return t; }
+      int32 height() { return t - b; }
 
       void init(int32 x, int32 y);
       void modify(int32 x, int32 y);
-      void make(int32 left, int32 bottom, int32 right, int32 top);
+      //void make(int32 left, int32 bottom, int32 right, int32 top);
       bool is_intersect(IntRect* rct);
       IntRect transform(PolarPoint pp);
       //IntRect() {};
       //IntRect(int32 l, int32 b, int32 r, int32 t);
-      void collapse( int32 x,  int32 y);
+      void collapse(int32 x, int32 y);
+      void zoom(double z);
+      void offset(IntPoint o);
       IntPoint center();
+
 };
 struct FloatRect
 {
-      double x0, y0, x1, y1;
+      double l, b, r, t;
+      double left() { return l; }
+      double bottom() { return b; }
+      double right() { return r; }
+      double top() { return t; }
+      void zoom(double z);
+      void offset(FloatPoint o);
+      FloatRect() {}
+      FloatRect(IntRect rct);
 };
 
 #define max_vertices 500
@@ -73,16 +85,18 @@ struct bucketset {
       int cnt;
       bucket barr[max_vertices];
 };
+
+
 struct Poly {
 private:
-      static bucketset aet, * et;
+
       void edge_tables_reset();
       void edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope);
       void edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope);
       void edge_store_table(IntPoint pt1, IntPoint pt2);
       void edge_update_slope(bucketset* b);
       void edge_remove_byY(bucketset* b, int scanline_no);
-      void calc_fill(const Poly* sh);
+      void calc_fill();
       void draw_fill(const ARGB color);
       //FloatRect float_bounds;
       IntRect bounds;
@@ -92,7 +106,9 @@ public:
       std::vector<IntPoint> work;
       std::vector<int32> path_ptr;
       void add_point(double x, double y);
+      void add_point(FloatPoint fp);
       void add_path();
+      void clear();
       IntRect get_bounds();
       IntRect get_bounds(PolarPoint pp);
       //IntRect get_bounds();
@@ -100,6 +116,8 @@ public:
       void transform(PolarPoint pp, FloatPoint offset = { 0.0,0.0 });
       Poly();
 };
+
+
 struct IntCircle {
       int32 x, y, r;
 };

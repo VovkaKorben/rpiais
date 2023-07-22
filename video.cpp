@@ -742,3 +742,4 @@ void video_driver::draw_shape(const Poly* sh, const ARGB fill_color, const ARGB 
       }
 }
 */
+video_driver* screen;

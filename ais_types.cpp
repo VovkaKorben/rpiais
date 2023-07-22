@@ -1,7 +1,9 @@
 #include "ais_types.h"
+#include "video.h"
 
 const int32 cornerX[4] = { 0,2,0,2 };
 const int32 cornerY[4] = { 1,1,3,3 };
+bucketset aet, * et;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 PolarPoint IntPoint::to_polar() {
 
@@ -53,6 +55,19 @@ int32 IntRect::_get_coord(int32 index)
 void IntRect::collapse(int32 x, int32 y) {
       l += x; r -= x;      b += y; t -= y;
 }
+void IntRect::zoom(double z) {
+      l = (int32)(l * z);
+      r = (int32)(r * z);
+      t = (int32)(t * z);
+      b = (int32)(b * z);
+}
+void IntRect::offset(IntPoint o) {
+      l += o.x;
+      r += o.x;
+      b += o.y;
+      t += o.y;
+}
+
 void IntRect::init(int32 x, int32 y) {
       l = r = x;      b = t = y;
 }
@@ -89,22 +104,43 @@ IntRect IntRect::transform(PolarPoint pp) {
 IntPoint IntRect::center() {
       return { (r - l) / 2,(t - b) / 2 };
 }
+
+FloatRect::FloatRect(IntRect rct) {
+      l = rct.l;
+      r = rct.r;
+      t = rct.t;
+      b = rct.b;
+}
+void FloatRect::zoom(double z) {
+      l *= z;
+      r *= z;
+      t *= z;
+      b *= z;
+}
+void FloatRect::offset(FloatPoint o) {
+      l += o.x;
+      r += o.x;
+      b += o.y;
+      t += o.y;
+}
 //void IntRect::collapse(const int32 x, const int32 y){}
 //IntRect::IntRect(int32 l, int32 b, int32 r, int32 t)
 //{      c[0] = l; c[1] = b; c[2] = r; c[3] = t;}
 //void IntRect::collapse(const int32 v) {      collapse(v, v);}
 //void IntRect::collapse(const int32 x, const int32 y) {      c[0] -= x; c[2] += y;      c[1] += y; c[3] -= y;}
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-FloatPoint FloatPoint::latlon2meter() // in format(lon, lat)
+void FloatPoint::latlon2meter() // in format(lon, lat)
 {
-      double rx = (x * 20037508.34) / 180, ry;
+      //double tx = x / PI * 180;      double ty = y / PI * 180;
+
+      x = (x * 20037508.34) / 180;
       if (std::abs(y) >= 85.051129)
             // The value 85.051129° is the latitude at which the full projected map becomes a square
-            ry = dsign(y) * std::abs(y) * 111.132952777;
+            y = dsign(y) * std::abs(y) * 111.132952777;
       else
-            ry = std::log(std::tan(((90 + y) * PI) / 360)) / (PI / 180);
-      ry = (ry * 20037508.34) / 180;
-      return { rx,ry };
+            y = std::log(std::tan(((90 + y) * PI) / 360)) / (PI / 180);
+      y = (y * 20037508.34) / 180;
+      //return { rx,ry };
 }
 IntPoint FloatPoint::to_int()
 {
@@ -186,8 +222,7 @@ void PolarPoint::rotate(double a) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 Poly::Poly()
 {
-      origin.clear();
-      path_ptr.clear();
+      clear();
 }
 IntRect Poly::transform_bounds(PolarPoint pp) {
       return bounds.transform(pp);
@@ -198,13 +233,18 @@ IntRect Poly::get_bounds(PolarPoint pp) {
 void Poly::add_point(double x, double y) {
 
       origin.push_back({ x,y });
-
+      path_ptr.back() = origin.size();
       if (origin.size() == 1)
             bounds.init((int32)x, (int32)y);
       else
             bounds.modify((int32)x, (int32)y);
 }
+void Poly::add_point(FloatPoint fp)
+{
+      add_point(fp.x, fp.y);
+}
 void Poly::add_path() {
+      path_ptr.push_back(origin.size());
 }
 IntRect Poly::get_bounds()
 {
@@ -212,7 +252,10 @@ IntRect Poly::get_bounds()
 }
 void Poly::transform(PolarPoint pp, FloatPoint offset) {
 }
-
+void Poly::clear() {
+      origin.clear();
+      path_ptr.clear();
+}
 
 
 
@@ -243,7 +286,7 @@ void _insertionSort(bucketset* b) {
 void Poly::edge_tables_reset()
 {
       aet.cnt = 0;
-      for (int i = 0; i < _height; i++)
+      for (int i = 0; i < screen->height(); i++)
             et[i].cnt = 0;
 }
 void Poly::edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope)
@@ -270,7 +313,7 @@ void Poly::edge_store_table(IntPoint pt1, IntPoint pt2) {
       double dx, dy, slope;
 
       // if both points lies below or above viewable rect - edge skipped
-      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= _height and pt2.y >= _height))
+      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= screen->height() and pt2.y >= screen->height()))
             return;
       dy = pt1.y - pt2.y;
 
@@ -351,32 +394,32 @@ void Poly::edge_remove_byY(bucketset* b, int scanline_no)
       }
 }
 ////////////////////////////////////////////////////////////
-void Poly::calc_fill(const Poly* sh) {
+void Poly::calc_fill() {
 
-      IntPoint prev_point, point;
-      int path_end, point_id = 0;
-      for (int path_id = 0; path_id < sh->path_count; path_id++)
-      {
-            path_end = sh->pathindex[path_id + 1];
-            prev_point = sh->work[path_end - 1];
-            while (point_id < path_end)
-            {
-                  point = sh->work[point_id];
-                  //cout << "Process line: " << point << " -> " << prev_point << endl;
+      /*  IntPoint prev_point, point;
+        int path_end, point_id = 0;
+        for (int path_id = 0; path_id < sh->path_count; path_id++)
+        {
+              path_end = sh->pathindex[path_id + 1];
+              prev_point = sh->work[path_end - 1];
+              while (point_id < path_end)
+              {
+                    point = sh->work[point_id];
+                    //cout << "Process line: " << point << " -> " << prev_point << endl;
 
-                  edge_store_table(point, prev_point);
-                  prev_point = point;
-                  point_id++;
-            }
+                    edge_store_table(point, prev_point);
+                    prev_point = point;
+                    point_id++;
+              }
 
-      }
+        }*/
 }
 void Poly::draw_fill(const ARGB color)
 {
 
 
 
-      for (int scanline_no = 0; scanline_no < _height; scanline_no++)
+      for (int scanline_no = 0; scanline_no < screen->height(); scanline_no++)
       {
             for (int b = 0; b < et[scanline_no].cnt; b++)
             {
@@ -400,7 +443,7 @@ void Poly::draw_fill(const ARGB color)
                   else
                   {
                         x2 = aet.barr[bucket_no].ix;
-                        draw_line_fast(scanline_no, x1, x2, color);
+                        screen->draw_line_fast(scanline_no, x1, x2, color);
 
                   }
                   coordCount++;
