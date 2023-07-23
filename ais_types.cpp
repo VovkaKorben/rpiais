@@ -67,6 +67,12 @@ void IntRect::offset(IntPoint o) {
       b += o.y;
       t += o.y;
 }
+void IntRect::offset(int32 x, int32 y) {
+      l += x;
+      r += x;
+      b += y;
+      t += y;
+}
 
 void IntRect::init(int32 x, int32 y) {
       l = r = x;      b = t = y;
@@ -102,7 +108,7 @@ IntRect IntRect::transform(PolarPoint pp) {
       c[0] = left; c[1] = bottom; c[2] = right; c[3] = top;
 }*/
 IntPoint IntRect::center() {
-      return { (r - l) / 2,(t - b) / 2 };
+      return { l+(r - l) / 2,b+(t - b) / 2 };
 }
 
 FloatRect::FloatRect(IntRect rct) {
@@ -224,16 +230,13 @@ Poly::Poly()
 {
       clear();
 }
-IntRect Poly::transform_bounds(PolarPoint pp) {
-      return bounds.transform(pp);
-}
-IntRect Poly::get_bounds(PolarPoint pp) {
-      return bounds.transform(pp);
+IntRect Poly::get_bounds() const {
+      return bounds;
 }
 void Poly::add_point(double x, double y) {
 
       origin.push_back({ x,y });
-      path_ptr.back() = origin.size();
+      path_ptr.back() =(int32) origin.size();
       if (origin.size() == 1)
             bounds.init((int32)x, (int32)y);
       else
@@ -244,13 +247,13 @@ void Poly::add_point(FloatPoint fp)
       add_point(fp.x, fp.y);
 }
 void Poly::add_path() {
-      path_ptr.push_back(origin.size());
+      path_ptr.push_back((int32)origin.size());
 }
-IntRect Poly::get_bounds()
-{
-      return IntRect();
+void Poly::load_finished() {
+      work.resize(origin.size());
 }
-void Poly::transform(PolarPoint pp, FloatPoint offset) {
+
+void Poly::transform(PolarPoint pp) {
 }
 void Poly::clear() {
       origin.clear();

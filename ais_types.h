@@ -42,12 +42,13 @@ struct IntRect
 {
       //private:
       int32 l, b, r, t;
-      int32 _get_coord(int32 index);
+      //int32 _get_coord(int32 index);
       //public:
       int32 left() { return l; }
       int32 bottom() { return b; }
       int32 right() { return r; }
       int32 top() { return t; }
+      int32 width() { return r - l; }
       int32 height() { return t - b; }
 
       void init(int32 x, int32 y);
@@ -60,6 +61,7 @@ struct IntRect
       void collapse(int32 x, int32 y);
       void zoom(double z);
       void offset(IntPoint o);
+      void offset(int32 x, int32 y);
       IntPoint center();
 
 };
@@ -89,7 +91,9 @@ struct bucketset {
 
 struct Poly {
 private:
-
+      std::vector<FloatPoint> origin;
+      std::vector<IntPoint> work;
+      std::vector<int32> path_ptr;
       void edge_tables_reset();
       void edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope);
       void edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope);
@@ -102,18 +106,18 @@ private:
       IntRect bounds;
       //int32 points_count;
 public:
-      std::vector<FloatPoint> origin;
-      std::vector<IntPoint> work;
-      std::vector<int32> path_ptr;
+     
       void add_point(double x, double y);
       void add_point(FloatPoint fp);
       void add_path();
+      void load_finished();
+
       void clear();
-      IntRect get_bounds();
-      IntRect get_bounds(PolarPoint pp);
+      IntRect get_bounds() const;
+      //IntRect get_bounds(PolarPoint pp);
       //IntRect get_bounds();
-      IntRect transform_bounds(PolarPoint pp);
-      void transform(PolarPoint pp, FloatPoint offset = { 0.0,0.0 });
+      //IntRect transform_bounds(PolarPoint pp);
+      void transform(PolarPoint pp);
       Poly();
 };
 

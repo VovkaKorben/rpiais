@@ -29,8 +29,8 @@ const ARGB clTransparency50 = 0x80000000;
 const ARGB clTransparency75 = 0xC0000000;
 
 extern IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
-extern IntPoint VIEWBOX_CENTER;
-extern int32 CENTER_X, CENTER_Y;
+extern IntPoint CENTER;
+//extern int32 CENTER_X, CENTER_Y;
 
 
 #define FONT_OUTLINE 0
@@ -130,4 +130,5 @@ public:
 };
 
 extern video_driver* screen;
+extern double overlap_coeff;
 #endif

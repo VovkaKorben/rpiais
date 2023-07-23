@@ -30,10 +30,10 @@
 
 
 
-int32 CENTER_X, CENTER_Y;
-IntPoint VIEWBOX_CENTER;
-
+//int32 CENTER_X, CENTER_Y;
+IntPoint CENTER;
 IntRect VIEWBOX_RECT, SCREEN_RECT, SHIPLIST_RECT, WINDOW_RECT;
+double overlap_coeff;
 ////////////////////////////////////////////////////////////
 
 
@@ -175,21 +175,20 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
       pix_buf = (PXPTR)tmp_offscreen;
 
       // creating rects
-      CENTER_X = _width / 3, CENTER_Y = _height / 2;
-      VIEWBOX_CENTER = { CENTER_X ,CENTER_Y };
-      //CENTER.x = CENTER_X, CENTER.y = CENTER_Y;
-      VIEWBOX_RECT = { -CENTER_X, -CENTER_Y, CENTER_X - 1, CENTER_Y - 1 };
+      const int32 ship_list_width = 300;
       SCREEN_RECT = { 0, 0, _width - 1, _height - 1 };
-      SHIPLIST_RECT = { CENTER_X * 2, 0, _width - 1, _height - 1 };
+      CENTER = { (SCREEN_RECT.width() - ship_list_width) / 2 , SCREEN_RECT.height() / 2 };
+
+      SHIPLIST_RECT = { SCREEN_RECT.r - ship_list_width, SCREEN_RECT.b, SCREEN_RECT.r, SCREEN_RECT.t };
+      VIEWBOX_RECT = SCREEN_RECT;// { SCREEN_RECT.l, SCREEN_RECT.b, SCREEN_RECT.r - ship_list_width, SCREEN_RECT.t };
+      VIEWBOX_RECT.offset(-CENTER.x,-CENTER.y);
+
       WINDOW_RECT = SCREEN_RECT;
       WINDOW_RECT.collapse(50, 50);
 
-      // init fill 
-      //et = new bucketset[_height];
       if (ioctl(fbdev, KDSETMODE, KD_GRAPHICS)) {
             perror("ioctl");
             last_error = FB_SET_KDSETMODE_FAILED;
-            //return;
       }
       last_error = FB_NO_ERROR;
 }
