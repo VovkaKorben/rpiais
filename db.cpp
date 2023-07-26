@@ -146,15 +146,15 @@ mysql_driver::~mysql_driver() {
       delete res;
       delete conn;
 }
-int32 mysql_driver::get_myint(const std::string field_name)
+int32 mysql_driver::get_int(const std::string field_name)
 {
       return       res->getInt(field_name);
 }
-std::string mysql_driver::get_mystr(const std::string field_name)
+std::string mysql_driver::get_str(const std::string field_name)
 {
       return       res->getString(field_name);
 }
-double mysql_driver::get_myfloat(const std::string field_name)
+double mysql_driver::get_double(const std::string field_name)
 {
       return     (double)(res->getDouble(field_name));
 }
@@ -164,55 +164,55 @@ int load_dicts(mysql_driver* driver)
       sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear(); mid_list.clear(); mid_country.clear();
       driver->exec_file(data_path("/sql/dict/sentences.sql"));
       while (driver->fetch()) {
-            std::string  str_id = driver->get_mystr("id");
+            std::string  str_id = driver->get_str("id");
             std::transform(str_id.begin(), str_id.end(), str_id.begin(), ::toupper);
             if (lut.count(str_id) == 0)
                   throw std::runtime_error("no handler for " + str_id);
             sentences.insert({ str_id, {
-                        driver->get_mystr("description"),
-                        driver->get_myint("grouped"),
+                        driver->get_str("description"),
+                        driver->get_int("grouped"),
                         lut[str_id]
                         } });
       }
 
       driver->exec_file(data_path("/sql/dict/talkers.sql"));
       while (driver->fetch()) {
-            std::string str_id = driver->get_mystr("id");
+            std::string str_id = driver->get_str("id");
             talkers.insert({ str_id, {
-                  driver->get_mystr("description"),
-                  driver->get_myint("obsolete"),
+                  driver->get_str("description"),
+                  driver->get_int("obsolete"),
                   } });
       }
 
       driver->exec_file(data_path("/sql/dict/vdm_types.sql"));
       while (driver->fetch()) {
-            vdm_length[driver->get_myint("id")] = driver->get_myint("len");
+            vdm_length[driver->get_int("id")] = driver->get_int("len");
       }
 
       driver->exec_file(data_path("/sql/dict/vdm_defs.sql"));
       while (driver->fetch()) {
-            int32 msg_id = driver->get_myint("msg_id");
+            int32 msg_id = driver->get_int("msg_id");
             if (vdm_defs.count(msg_id) == 0)
                   vdm_defs[msg_id] = {};
 
-            std::string fieldname = driver->get_mystr("ref"); // `ref` value
+            std::string fieldname = driver->get_str("ref"); // `ref` value
             std::transform(fieldname.begin(), fieldname.end(), fieldname.begin(), ::toupper);
             vdm_defs[msg_id].push_back({
-                  driver->get_myint("start"),// start
-                  driver->get_myint("len"),// len
+                  driver->get_int("start"),// start
+                  driver->get_int("len"),// len
                   fieldname,
-                  driver->get_myint("type"),// type
-                  driver->get_myint("def"),// def
-                  driver->get_myint("exp"),// exp
+                  driver->get_int("type"),// type
+                  driver->get_int("def"),// def
+                  driver->get_int("exp"),// exp
                   });
       }
 
       driver->exec_file(data_path("/sql/dict/mid_codes.sql"));
       while (driver->fetch()) {
-            int32 mid = driver->get_myint("mid");
+            int32 mid = driver->get_int("mid");
             mid_struct_s mid_s;
-            mid_s.code = driver->get_mystr("abbr");
-            mid_s.country = driver->get_mystr("country");
+            mid_s.code = driver->get_str("abbr");
+            mid_s.country = driver->get_str("country");
             mid_list.insert({ mid, mid_s });
             //img_minus = new image();
             std::string filename = string_format(data_path("/img/flags/%s.png"), mid_s.code.c_str());
@@ -222,52 +222,7 @@ int load_dicts(mysql_driver* driver)
                   printf("[i] loading MID codes, file not found: %s", filename.c_str());
 
       }
-      /*driver->exec_file(data_path("/sql/readdicts.sql"));
 
-      int dict_index = 0;
-      do {
-
-
-            while (driver->fetch()) {
-                  switch (dict_index) {
-
-
-                              int msg_id = driver->get_myint("msg_id");
-                              if (vdm_defs.count(msg_id) == 0)
-                                    vdm_defs[msg_id] = {};
-
-                              std::string fieldname = driver->get_mystr("ref"); // `ref` value
-                              std::transform(fieldname.begin(), fieldname.end(), fieldname.begin(), ::toupper);
-                              vdm_defs[msg_id].push_back({
-                                    driver->get_myint("start"),// start
-                                    driver->get_myint("len"),// len
-                                    fieldname,
-                                    driver->get_myint("type"),// type
-                                    driver->get_myint("def"),// def
-                                    driver->get_myint("exp"),// exp
-                                    });
-                              break;
-                        }
-                        case 4: { // MID data
-
-                              //std::map<int, mid_struct_s> mid_list;
-                              //std::map<std::string, image> mid_country;
-
-
-
-
-                              break;
-                        }
-
-                  }
-            }
-            driver->free_result();
-
-            dict_index++;
-
-      } while (driver->has_next());
-
-      */
       return 0;
 
 
@@ -276,7 +231,10 @@ int init_db(mysql_driver* driver)
 {
       driver->exec_file(data_path("/sql/map/map_init.sql"));
 
-      driver->prepare(PREPARED_MAP_READ, data_path("/sql/map/map_read.sql"));
+      driver->prepare(PREPARED_MAP_QUERY, data_path("/sql/map/map_query.sql"));
+      driver->prepare(PREPARED_MAP_READ_BOUNDS, data_path("/sql/map/map_bounds.sql"));
+      driver->prepare(PREPARED_MAP_READ_POINTS, data_path("/sql/map/map_points.sql"));
+
       driver->prepare(PREPARED_MAP_GARBAGE, data_path("/sql/map/map_garbage.sql"));
       driver->prepare(PREPARED_GPS, data_path("/sql/gps/set_gps_pos.sql"));
       driver->prepare(PREPARED_GPS_TOTAL, data_path("/sql/gps/get_gps_total.sql"));
@@ -286,7 +244,7 @@ int init_db(mysql_driver* driver)
       if (driver->exec_file(data_path("/sql/gps/get_gps_session.sql")))
             return 1;
       driver->fetch();
-      gps_session_id = driver->get_myint("sessid") + 1;
+      gps_session_id = driver->get_int("sessid") + 1;
 
 
       // load NMEA tables
@@ -338,7 +296,7 @@ int32 mysql_driver::exec(std::string query)
             for (const std::string& single_query : query_list)
             {
 #ifdef QUERY_LOG
-                  printf("[i] Query ----------------\n%s\n", single_query.c_str());
+                  printf("[i] Query: %s\n", single_query.c_str());
 #endif
                   if (!getFirstWord(single_query, command)) {
                         printf("[E] error while get query command\n");

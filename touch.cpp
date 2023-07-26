@@ -378,7 +378,7 @@ int touch_manager::clear_group(int32 group_id) {
       group->areas.clear();
       return 0;
 }
-int touch_manager::add_rect(int32 group_id, int32 area_id, IntRect rct)
+int32 touch_manager::add_rect(int32 group_id, int32 area_id, IntRect rct)
 {
       touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
@@ -392,7 +392,7 @@ int touch_manager::add_rect(int32 group_id, int32 area_id, IntRect rct)
       group->areas.push_back(figure);
       return 0;
 }
-int touch_manager::add_circle(int32 group_id, int32 area_id, IntCircle circle) {
+int32 touch_manager::add_circle(int32 group_id, int32 area_id, IntCircle circle) {
       touch_group* group = get_group(group_id);
       if (group == nullptr) return 1;
       touch_coords figure;
@@ -404,7 +404,7 @@ int touch_manager::add_circle(int32 group_id, int32 area_id, IntCircle circle) {
       group->areas.push_back(figure);
       return 0;
 }
-int touch_manager::add_circle(int32 group_id, int32 area_id, IntPoint center, uint32 radius)
+int32 touch_manager::add_circle(int32 group_id, int32 area_id, IntPoint center, int32 radius)
 {
       return add_circle(group_id, area_id, { center.x,center.y,radius });
 
@@ -468,7 +468,7 @@ void touch_manager::debug(video_driver* scr) {
                               break;
                         }
                         case TOUCH_TYPE_CIRCLE: {
-                              scr->draw_circle({ tmp.coords[0], tmp.coords[1],(uint32)tmp.coords[2] }, clr, clNone);
+                              scr->draw_circle({ tmp.coords[0], tmp.coords[1],tmp.coords[2] }, clr, clNone);
                               break;
                         }
                   }

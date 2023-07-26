@@ -35,7 +35,7 @@ public:
             interval = font_interval;
       }
       // uint32 offset() { return ofs; };
-      char_info_s * get_char_info(char c)
+      char_info_s* get_char_info(char c)
       {
 
             size_t v = c - 32;
@@ -53,13 +53,14 @@ public:
 
 class image {
 private:
-      uint32 data_size, w, h;
+      uint32 data_size;
+      int32 w, h;
       puint8 data;
       bool loaded;
 public:
       bool is_loaded() { return loaded; }
-      uint32 width() { return w; }
-      uint32 height() { return h; }
+      int32 width() { return w; }
+      int32 height() { return h; }
       puint8 data_ptr() { return data; };
       image() {}
       image(std::string filename) {
@@ -73,12 +74,14 @@ public:
             //size_t isize, expected_size = w * h * bpp / 8;
             inp.seekg(0, inp.end);
             size_t inp_isize = inp.tellg();
-            uint8 * inp_data = new uint8[inp_isize];
+            uint8* inp_data = new uint8[inp_isize];
             inp.seekg(0, inp.beg);
-            inp.read((char *)inp_data, inp_isize);
+            inp.read((char*)inp_data, inp_isize);
 
-
-            unsigned error = lodepng_decode32(&data, &w, &h, inp_data, inp_isize);
+            uint32 tw, th;
+            uint32 error = lodepng_decode32(&data, &tw, &th, inp_data, inp_isize);
+            w = (int32)tw;
+            h = (int32)th;
             delete[]inp_data;
             if (error) {
                   std::cout << "PNG encoding error " << error << ": " << lodepng_error_text(error) << std::endl;

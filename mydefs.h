@@ -50,7 +50,7 @@ typedef signed short int16;
 typedef signed short* pint16;
 
 typedef signed long long int64;
-//typedef unsigned long long uint64;
+typedef unsigned long long uint64;
 
 typedef unsigned int ARGB;
 

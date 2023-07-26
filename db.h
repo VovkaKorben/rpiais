@@ -13,7 +13,9 @@
 
 //#define PREPARED_NMEA 0
 #define PREPARED_MAP_GARBAGE 1
-#define PREPARED_MAP_READ 2
+#define PREPARED_MAP_QUERY 200
+#define PREPARED_MAP_READ_BOUNDS 201
+#define PREPARED_MAP_READ_POINTS 202
 #define PREPARED_GPS 3
 #define PREPARED_GPS_TOTAL 4
 
@@ -22,25 +24,27 @@ class  mysql_driver
 {
 private:
       sql::Connection* conn;
-      sql::ResultSet* res;
+      sql::ResultSet* res = nullptr;
 
       std::map<int32, std::string> pstmt;
       std::vector<std::string> fields;
 
-      
+
       size_t field_index(std::string field_name);
       void _print_error(std::string msg);
 public:
-//MYSQL* get_connection() { return connection; };
+      void close_res()
+      {
+            if (res != nullptr) {
+                  res->close();
+                  res = nullptr;
+            }
+      }
+      //MYSQL* get_connection() { return connection; };
 
-      int32 get_myint(const size_t index);
-      int32 get_myint(const std::string field_name);
-      uint64_t get_mybigint(const size_t index);
-      uint64_t get_mybigint(const std::string field_name);
-      std::string get_mystr(const size_t index);
-      std::string get_mystr(const std::string field_name);
-      double get_myfloat(const size_t index);
-      double get_myfloat(const std::string field_name);
+      int32 get_int(const std::string field_name);
+      std::string get_str(const std::string field_name);
+      double get_double(const std::string field_name);
 
       int32 exec_file(const std::string filename);
       int32 exec(const std::string query);
@@ -53,7 +57,7 @@ public:
                   sq = string_format2(sq, args ...);
             return exec(sq);
       };
-      
+
       bool  fetch();
       //bool fetch();      void  free_result();      void magic_close();
       //my_ulonglong row_count();

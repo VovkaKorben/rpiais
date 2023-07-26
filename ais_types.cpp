@@ -1,8 +1,7 @@
 #include "ais_types.h"
 #include "video.h"
 
-const int32 cornerX[4] = { 0,2,0,2 };
-const int32 cornerY[4] = { 1,1,3,3 };
+
 bucketset aet, * et;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 PolarPoint IntPoint::to_polar() {
@@ -18,31 +17,64 @@ PolarPoint IntPoint::to_polar() {
       }
       else
       {
-            tmp.angle = std::atan(y / x);
+            tmp.angle = std::atan((double)y / (double)x);
             if (x < 0)
                   tmp.angle += RAD180;
             else if (y < 0)
                   tmp.angle += RAD360;
 
       }
-      tmp.dist = std::sqrt(x * x + y * y);
+      tmp.dist = std::sqrt(static_cast<uint64_t>(x) * x + static_cast<uint64_t>(y) * y);
       return tmp;
 }
-IntPoint IntPoint::transform(PolarPoint pp) {
-      PolarPoint tmp = this->to_polar();
-      tmp.add(pp);
-      return tmp.to_int();
+void IntPoint::transform(const IntPoint& center, const PolarPoint& transform_value) {
+      IntPoint ip = { x,y };
+      ip.sub(center);
+      PolarPoint pp = ip.to_polar();
+      pp.angle += transform_value.angle;
+      pp.dist *= transform_value.dist;
+      ip = pp.to_int();
+      ip.add(center);
+      x = ip.x, y = ip.y;
+
 }
-void IntPoint::add(IntPoint pt) {
+void IntPoint::transform( const PolarPoint& transform_value) {
+      IntPoint ip = { x,y };
+      //ip.sub(center);
+      PolarPoint pp = ip.to_polar();
+      pp.angle += transform_value.angle;
+      pp.dist *= transform_value.dist;
+      ip = pp.to_int();
+      //ip.add(center);
+      x = ip.x, y = ip.y;
+
+}
+void IntPoint::add(const IntPoint& pt) {
       x += pt.x;
       y += pt.y;
+}
+void IntPoint::sub(const IntPoint& pt) {
+      x -= pt.x;
+      y -= pt.y;
 }
 void IntPoint::add(int32 _x, int32 _y) {
       x += _x;
       y += _y;
 }
+std::string IntPoint::dbg() const
+{
+      return string_format("%d, %d", x, y);
+}
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int32 IntRect::_get_coord(int32 index)
+
+std::string IntRect::dbg()
+{
+      return string_format("L:%d, B:%d, R:%d, T:%d", l, b, r, t);
+}
+
+
+
+/*int32 IntRect::_get_coord(int32 index)
 {
       switch (index)
       {
@@ -51,7 +83,7 @@ int32 IntRect::_get_coord(int32 index)
             case 3:return t;
             default:return l;
       }
-}
+}*/
 void IntRect::collapse(int32 x, int32 y) {
       l += x; r -= x;      b += y; t -= y;
 }
@@ -83,18 +115,55 @@ void IntRect::modify(int32 x, int32 y) {
       r = imax(r, x);
       t = imax(t, y);
 }
-bool IntRect::is_intersect(IntRect* rct)
+bool IntRect::is_intersect(const IntRect& rct)
 {
-      return false;
+      return ((l < rct.r) && (rct.l < r) && (b < rct.t) && (rct.b < t));
 }
-IntRect IntRect::transform(PolarPoint pp) {
+IntPoint IntRect::get_corner(int32 index)
+{
+      //const int32 cornerX[4] = { 0,2,2,0 };      const int32 cornerY[4] = { 1,1,3,3 };
+
+      switch (index)
+      {
+            case 0:return { l,b };
+            case 1:return { r,b };
+            case 2:return { r,t };
+            case 3:return { l,t };
+            default: return { 0,0 };
+      }
+}
+IntRect IntRect::transform_bounds(const IntPoint& center, const PolarPoint& transform_value) {
       IntRect rct;
       IntPoint ip;
+      //printf("center: %s\n", center.dbg().c_str());
       for (int32 n = 0; n < 4; n++)
       {
-            ip.x = _get_coord(cornerX[n]);
-            ip.y = _get_coord(cornerY[n]);
-            ip.transform(pp);
+            ip = get_corner(n);
+            //printf("%s\n", ip.dbg().c_str());
+            //printf("pt in: %s\n", ip.dbg().c_str());
+            // ip.x = _get_coord(cornerX[n]);            ip.y = _get_coord(cornerY[n]);
+            ip.transform(center, transform_value);
+            //printf("%s\n", ip.dbg().c_str());
+            if (n)
+                  rct.modify(ip.x, ip.y);
+            else // init rect
+                  rct.init(ip.x, ip.y);
+
+      }
+      return rct;
+}
+IntRect IntRect::transform_bounds(const PolarPoint& transform_value) {
+      IntRect rct;
+      IntPoint ip;
+      //printf("center: %s\n", center.dbg().c_str());
+      for (int32 n = 0; n < 4; n++)
+      {
+            ip = get_corner(n);
+            //printf("%s\n", ip.dbg().c_str());
+            //printf("pt in: %s\n", ip.dbg().c_str());
+            // ip.x = _get_coord(cornerX[n]);            ip.y = _get_coord(cornerY[n]);
+            ip.transform( transform_value);
+            //printf("%s\n", ip.dbg().c_str());
             if (n)
                   rct.modify(ip.x, ip.y);
             else // init rect
@@ -108,9 +177,24 @@ IntRect IntRect::transform(PolarPoint pp) {
       c[0] = left; c[1] = bottom; c[2] = right; c[3] = top;
 }*/
 IntPoint IntRect::center() {
-      return { l+(r - l) / 2,b+(t - b) / 2 };
+      return { l + (r - l) / 2,b + (t - b) / 2 };
 }
 
+double FloatRect::_get_coord(int32 index)
+{
+      switch (index)
+      {
+            case 1:return b;
+            case 2:return r;
+            case 3:return t;
+            default:return l;
+      }
+}
+
+std::string FloatRect::dbg()
+{
+      return string_format("L:%.2f, B:%.2f, R:%.2f, T:%.2f", l, b, r, t);
+}
 FloatRect::FloatRect(IntRect rct) {
       l = rct.l;
       r = rct.r;
@@ -135,6 +219,25 @@ void FloatRect::offset(FloatPoint o) {
 //void IntRect::collapse(const int32 v) {      collapse(v, v);}
 //void IntRect::collapse(const int32 x, const int32 y) {      c[0] -= x; c[2] += y;      c[1] += y; c[3] -= y;}
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+IntPoint FloatPoint::transform(const IntPoint& center, const PolarPoint& transform_value) {
+
+
+
+            IntPoint ip =to_int();
+            ip.sub(center);
+            PolarPoint pp = ip.to_polar();
+            pp.angle += transform_value.angle;
+            pp.dist *= transform_value.dist;
+            ip = pp.to_int();
+           // ip.add(center);
+            return ip;
+
+
+}
+std::string  FloatPoint::dbg()
+{
+      return string_format("x:%.3f, y:%.3f", x, y);
+}
 void FloatPoint::latlon2meter() // in format(lon, lat)
 {
       //double tx = x / PI * 180;      double ty = y / PI * 180;
@@ -226,17 +329,22 @@ void PolarPoint::rotate(double a) {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 Poly::Poly()
 {
-      clear();
+      // clear();
 }
+
+/*
 IntRect Poly::get_bounds() const {
       return bounds;
 }
+
 void Poly::add_point(double x, double y) {
 
       origin.push_back({ x,y });
-      path_ptr.back() =(int32) origin.size();
+      path_ptr.back() = (int32)origin.size();
       if (origin.size() == 1)
             bounds.init((int32)x, (int32)y);
       else
@@ -251,14 +359,13 @@ void Poly::add_path() {
 }
 void Poly::load_finished() {
       work.resize(origin.size());
-}
-
-void Poly::transform(PolarPoint pp) {
-}
-void Poly::clear() {
+}void Poly::clear() {
       origin.clear();
       path_ptr.clear();
 }
+*/
+//void Poly::transform(PolarPoint pp) {}
+
 
 
 
@@ -458,7 +565,19 @@ void Poly::draw_fill(const ARGB color)
 
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//void Poly::draw(video_driver* screen, const ARGB outline, const ARGB fill){}
 
+void Poly::transform_points(const IntPoint& center, const PolarPoint& transform_value) {
+      //IntRect rct;      IntPoint ip;
+      //printf("center: %s\n", center.dbg().c_str());
+      printf("-----------------------------\n");
+      for (size_t n = 0; n < origin.size(); n++)
+      {
+            work[n] = origin[n].transform(center, transform_value);
+            printf("%s\n", work[n].dbg().c_str());
+
+      }
+}
 int32 gps_session_id;
 satellites sat;
 //std::map<int, satellite> satellites;

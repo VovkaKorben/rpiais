@@ -21,28 +21,17 @@
 
 
 
-//const uint64 SHAPES_UPDATE = 5 * 60 * 1000;  // 5 min for update shapes
 const uint64_t SHAPES_UPDATE = 10 * 1000;  // 5 min for update shapes
 uint64_t next_map_update;
-
-
 int32 min_fit, circle_radius;
-
-
 image* img_minus, * img_plus;
 const int32 ZOOM_BTN_MARGIN = 20;
-
-
-
-
 int32 show_info_window = 0;
-//using namespace std;
 
 
 touchscreen* touchscr;
 touch_manager* touchman;
 nmea_reciever* nmea_recv;
-
 StringQueue  nmea_list;
 
 
@@ -86,65 +75,74 @@ void zoom_changed(int32 new_zoom_index)
 ////////////////////////////////////////////////////////////
 int32 load_shapes()
 {
-      //double overlap_coeff = 1.05 * ZOOM_RANGE[max_zoom_index - 1];
-      int32 shapes_total = 0, points_total = 0;
-
-
-      FloatRect query_coords(VIEWBOX_RECT);
-      query_coords.zoom(map_update_coeff);
-      query_coords.offset(own_vessel.get_meters());
-
-      mysql->exec_prepared(PREPARED_MAP_READ,
+      IntPoint center = own_vessel.get_meters().to_int();
+      IntRect query_coords(VIEWBOX_RECT);
+      query_coords = query_coords.transform_bounds({ 0,0 }, { -own_vessel.heading(),  map_update_coeff });
+      query_coords.offset(center);
+      mysql->exec_prepared(PREPARED_MAP_QUERY,
             query_coords.left(),
             query_coords.bottom(),
             query_coords.right(),
             query_coords.top());
+      int32 rec_id, points_total = 0, points_cnt;
 
-      //      while (mysql->has_next());
+      // fetch shapes
+      std::vector <int32> id_list;
 
-    //  mysql->store();
-
-      // fetching shapes
-      Poly* poly;
-      int32 prev_rec_id = -1, rec_id, part_id, prev_part_id;
-      //int32 prev_rec_id = -1;
-      FloatPoint coords;
+      mysql->exec_prepared(PREPARED_MAP_READ_BOUNDS);
       while (mysql->fetch())
       {
-            rec_id = mysql->get_myint("recid");
-
-            // check shape already exists
-            if (map_shapes.count(rec_id) == 0)
-            {
-                  //map_shapes.emplace(recid, Poly());
-                  if (prev_rec_id != -1)
-                        map_shapes[prev_rec_id].shape.load_finished();
-                  map_shapes.emplace(std::piecewise_construct, std::forward_as_tuple(rec_id), std::forward_as_tuple());
-                  map_shapes[rec_id].last_access = utc_ms();
-                  poly = &map_shapes[rec_id].shape;
-                  prev_part_id = -1;
-                  shapes_total++;
-                  prev_rec_id = rec_id;
-            }
-
-            // check for new part started
-            part_id = mysql->get_myint("partid");
-            if (part_id != prev_part_id)
-            {
-                  poly->add_path();
-                  prev_part_id = part_id;
-            }
-            coords.x = mysql->get_myfloat("x");
-            coords.y = mysql->get_myfloat("y");
-            poly->add_point(coords);
-            points_total++;
+            rec_id = mysql->get_int("recid");
+            id_list.push_back(rec_id);
+            map_shapes.emplace(std::piecewise_construct, std::forward_as_tuple(rec_id), std::forward_as_tuple());
+            map_shapes[rec_id].last_access = utc_ms();
+            points_cnt = mysql->get_int("points");
+            map_shapes[rec_id].shape.origin.resize(points_cnt);
+            map_shapes[rec_id].shape.work.resize(points_cnt);
+            points_total += points_cnt;
+            map_shapes[rec_id].shape.path_ptr.resize(mysql->get_int("parts"));
+            map_shapes[rec_id].shape.bounds = {
+            mysql->get_int("minx"),
+            mysql->get_int("miny"),
+            mysql->get_int("maxx"),
+            mysql->get_int("maxy")
+            };
       }
+      mysql->close_res();
 
-      std::cout << "Shapes loaded: " << shapes_total << std::endl;
-      std::cout << "Points added: " << points_total << std::endl;
+      // fetching points
+      int32 prev_rec_id = -1, prev_part_id = -1, part_id, part_index, point_index;//         rec_id, part_id, prev_part_id;
+      mysql->exec_prepared(PREPARED_MAP_READ_POINTS);
+      while (mysql->fetch())
+      {
+            rec_id = mysql->get_int("recid");
+            if (prev_rec_id != rec_id)
+            {             // start new shape
+                  prev_rec_id = rec_id;
+                  prev_part_id = -1;
+                  point_index = 0;
+                  part_index = -1;
+            }
+            part_id = mysql->get_int("partid");
+            if (prev_part_id != part_id)
+            { // next part start
+                  prev_part_id = part_id;
+                  part_index++;
+            }
+
+            map_shapes[rec_id].shape.origin[point_index] = {
+            mysql->get_double("x") ,
+            mysql->get_double("y")
+            };
+            point_index++;
+            map_shapes[rec_id].shape.path_ptr[part_index] = point_index;
+      }
+      mysql->close_res();
+
+      printf("[i] Shapes: %d, points: %d\n", id_list.size(), points_total);
       return 0;
 }
-uint64_t  update_map_data(uint64_t next_check)
+int32  update_map_data(uint64_t& next_check)
 {
       uint64_t ms = utc_ms();
       if (own_vessel.get_pos_index() != -1)
@@ -157,10 +155,10 @@ uint64_t  update_map_data(uint64_t next_check)
                   next_check = ms + SHAPES_UPDATE;
             }
             //      else                  next_check = ms + SHAPES_UPDATE_FIRST;
-            return next_check;
+            return 1;
       }
       else
-            return ms;
+            return 0;
 
       //return 0;
 }
@@ -173,7 +171,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
       FloatPoint float_center,
             own_meters = own_vessel.get_meters();
       IntPoint int_center;
-      uint32 circle_size = imax((int)(6 * zoom), 3);
+      //    uint32 circle_size = imax((int)(6 * zoom), 3);
 
       PolarPoint polar_pt;
 
@@ -189,8 +187,8 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
                   float_center.substract(own_meters);
                   polar_pt = float_center.to_polar();
                   polar_pt.zoom(zoom);
-                  if (own_vessel.is_relative())
-                        polar_pt.rotate(-own_vessel.get_heading());
+                  if (own_vessel.relative())
+                        polar_pt.rotate(-own_vessel.heading());
                   int_center = polar_pt.to_int();
 
 
@@ -248,17 +246,38 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 }
 void draw_shapes(const ARGB fill_color, const ARGB outline_color)
 {
+      // считаем наш тестовый прямоугольник (view_box), это видимая часть
+     //все вычисления приводим к центру (0,0)
 
       //rotate box and get new bounds
-      IntRect new_box;
-      for (const auto& sh : map_shapes)
+      PolarPoint transform_value = { own_vessel.heading(),zoom };// 30 degrees
+      IntPoint center = own_vessel.get_meters().to_int();
+
+      IntRect view_box(VIEWBOX_RECT);
+      //view_box.offset(center);
+      //view_box = view_box.transform_bounds(center, transform_value);
+      view_box.zoom(1 / zoom);// = view_box.transform_bounds(transform_value);
+
+
+      IntRect test_box;
+      //IntRect view_box = VIEWBOX_RECT.transform_bounds({ 0,0 }, { own_vessel.heading(),1 });
+      for (auto& sh : map_shapes)
             //auto const & ent1 : mymap
             //for (poly shape : shapes)
       {
             //if (fill_color != clNone || outline_color != clNone) {
                   //calculate new transormed corners
-            new_box = sh.second.shape.get_bounds();
-            new_box = new_box.transform();
+            test_box = sh.second.shape.bounds;
+            test_box.offset(-center.x, -center.y);
+            test_box = test_box.transform_bounds(transform_value);
+            if (test_box.is_intersect(view_box))
+            {
+                  sh.second.last_access = utc_ms(); // update using time
+                  sh.second.shape.transform_points(center, transform_value);
+                  screen->draw_shape(&sh.second.shape, clYellow, clBlack);
+            }
+            //printf("draw_shapes: %s\n", new_box.dbg().c_str());
+
             /*new_box = rotate_shape_box(&shape.second);
             if (new_box.is_intersect(SCREEN_RECT))
             {
@@ -450,9 +469,9 @@ void draw_track_info(int32 x, int32 y)
 
 
       while (mysql->fetch()) {
-            sessid = mysql->get_myint("sessid");
-            time = mysql->get_myint("time");
-            dist = mysql->get_myint("dist");
+            sessid = mysql->get_int("sessid");
+            time = mysql->get_int("time");
+            dist = mysql->get_int("dist");
 
             screen->draw_text(FONT_NORMAL, x + col_pos[1], y, string_format("#%d", sessid), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
             screen->draw_text(FONT_NORMAL, x + col_pos[2], y, time_diff(time), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
@@ -460,7 +479,7 @@ void draw_track_info(int32 x, int32 y)
             y -= 4 + screen->get_font_height(FONT_NORMAL);
 
       }
-      //      gps_session_id = driver->get_myint("sessid") + 1;
+      //      gps_session_id = driver->get_int("sessid") + 1;
 
 }
 void draw_satellites_info(int32 x, int32 y)
@@ -526,7 +545,6 @@ void draw_satellites_info(int32 x, int32 y)
       }
 
 }
-
 void draw_infowindow_global()
 {
       int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
@@ -542,7 +560,6 @@ void draw_timewindow_global()
       screen->draw_text(FONT_MONOMEDIUM, x, y, "Time Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone);//y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
 
 }
-
 void draw_infowindow_vessel()
 {
       vessel* v = &vessels[show_info_window];
@@ -554,7 +571,6 @@ void draw_infowindow_vessel()
       screen->draw_text(FONT_NORMAL, x, y, string_format("COG: %f", v->course), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
       screen->draw_text(FONT_NORMAL, x, y, string_format("Heading: %f", v->heading), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
 }
-
 void draw_infowindow()
 {
       if (!show_info_window)
@@ -614,7 +630,7 @@ void draw_frame()
             touchman->set_enabled(1);
 
             draw_shapes(clLand, clBlack);
-            draw_grid(own_vessel.is_relative() ? own_vessel.get_heading() : 0.0);
+            draw_grid(own_vessel.relative() ? own_vessel.heading() : 0.0);
             draw_vessels(0xcd8183, clBlack);
             draw_vessels_info();
 
@@ -637,14 +653,13 @@ void draw_frame()
       }
 }
 ////////////////////////////////////////////////////////////
-void process_touches() {
+int32 process_touches() {
 
       std::string msg;
       int32 group_id, area_id;
       touches_coords_s t;
       //touchman->check_point(30, 300, gi, name);
-      while (touchscr->pop(t))
-      {
+      while (touchscr->pop(t)) {
             PRINT_STRING(string_format("Touch: %d,%d ... \n", t.adjusted[0], t.adjusted[1]));
             if (touchman->check_point(t.adjusted[0], t.adjusted[1], group_id, area_id))
             {
@@ -705,7 +720,7 @@ void process_touches() {
             else
                   printf("not found\n");
       }
-
+      return 0;
 
 
 
@@ -723,28 +738,27 @@ void video_loop_start() {
 
 
 
-      int frames = 0;
+        //int frames = 0;
 
       std::string fps_str = "";
-
+      bool update_required;
 
       while (true)
       {
+            update_required = false;
 
-            //last_msg_id = update_nmea(last_msg_id);
-            update_nmea();
-            next_map_update = update_map_data(next_map_update);
-            draw_frame();
+            update_required |= update_nmea() > 0;
+            update_required |= update_map_data(next_map_update) > 0;
+            update_required |= process_touches() > 0;
 
-            process_touches();
-            touchman->debug(screen);
-
-
-            frames++;
+            if (update_required)
+            {
+                  draw_frame();
+                  touchman->debug(screen);
+                  screen->flip();
+            }
+            //            frames++;
             //fps_str = "none";            screen->draw_text(FONT_NORMAL, 5, 5, fps_str, 0xFFFF00, VALIGN_BOTTOM | HALIGN_LEFT);
-
-
-            screen->flip();
             usleep(100000);
       }
 
@@ -863,35 +877,9 @@ void init_database() {
       */
 }
 
-/*
-void do_poly_test() {
-      poly shape;
 
-      shape.path_count = 1;
-      shape.points_count = 3;
-      shape.pathindex = new int[shape.path_count + 1];
-      shape.pathindex[shape.path_count] = shape.points_count; // set closing point
-      shape.origin = new FloatPoint[shape.points_count];
-      shape.work = new IntPoint[shape.points_count];
-
-      shape.origin[0] = { -70.866, 377.953 };
-      shape.origin[1] = { 283.465, 354.331 };
-      shape.origin[2] = { 59.055, 47.244 };
-      for (int n = 0; n < shape.points_count; n++)
-            shape.work[n] = shape.origin[n].to_int();
-
-
-
-
-
-      screen->fill_rect(SCREEN_RECT, clLtGray);
-      screen->draw_outline_v2(&shape, clBlack);
-
-}*/
 int main()
 {
-
-      //printf("Started...\n\n");      std::cout << "Started 2..." << std::endl;
       try {
             CSimpleIniA ini;
             std::string ini_filename = data_path("/options.ini");
@@ -910,6 +898,9 @@ int main()
             init_touch(&ini);
             init_database();
             init_sock(&ini);
+            own_vessel.set_pos({ 29.0,62.0 }, position_type_e::gll);
+            //own_vessel.heading(0.52359877559829887307710723054658); // 30 degrees
+            //nmea_list.push("$GNGLL,6200.00000,N,02900.00000,E,122123.00,A,A*79");
             //sat = new sattelites();
 
             zoom_changed(zoom_index);

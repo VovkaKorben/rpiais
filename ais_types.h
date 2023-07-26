@@ -5,7 +5,7 @@
 #include <vector>
 #include "mydefs.h"
 #include "db.h"
-
+//#include "video.h"
 //  forward declarations
 struct  IntPoint;
 struct  FloatPoint;
@@ -21,28 +21,38 @@ struct PolarPoint
       void rotate(double a);
 };
 struct  FloatPoint {
+      std::string dbg();
       double x, y;
       void latlon2meter();
       IntPoint to_int();
       void substract(FloatPoint fp);
       PolarPoint to_polar();
       int32 haversine(FloatPoint fp);
+      IntPoint transform(const IntPoint& center, const PolarPoint& transform_value);
+     
 };
 struct IntPoint
 {
       int32 x, y;
       PolarPoint to_polar();
-      IntPoint transform(PolarPoint pp);
-      void add(IntPoint pt);
+
+      void transform(const IntPoint& center, const PolarPoint& transform_value);
+      void transform(const PolarPoint& transform_value);
+
+      void add(const IntPoint& ptt);
+      void sub(const IntPoint& pt);
       void add(int32 x, int32 y);
+      std::string dbg() const;
 };
 
 //rects
 struct IntRect
 {
+      std::string dbg();
       //private:
       int32 l, b, r, t;
       //int32 _get_coord(int32 index);
+      IntPoint get_corner(int32 index);
       //public:
       int32 left() { return l; }
       int32 bottom() { return b; }
@@ -53,9 +63,10 @@ struct IntRect
 
       void init(int32 x, int32 y);
       void modify(int32 x, int32 y);
-      //void make(int32 left, int32 bottom, int32 right, int32 top);
-      bool is_intersect(IntRect* rct);
-      IntRect transform(PolarPoint pp);
+      bool is_intersect(const IntRect& rct);
+      IntRect transform_bounds(const IntPoint& center, const PolarPoint& transform_value);
+      IntRect transform_bounds(const PolarPoint& transform_value);
+
       //IntRect() {};
       //IntRect(int32 l, int32 b, int32 r, int32 t);
       void collapse(int32 x, int32 y);
@@ -67,6 +78,11 @@ struct IntRect
 };
 struct FloatRect
 {
+private:
+      double _get_coord(int32 index);
+public:
+      FloatRect transform(const FloatPoint& center, const PolarPoint& transform_value);
+      std::string dbg();
       double l, b, r, t;
       double left() { return l; }
       double bottom() { return b; }
@@ -91,9 +107,7 @@ struct bucketset {
 
 struct Poly {
 private:
-      std::vector<FloatPoint> origin;
-      std::vector<IntPoint> work;
-      std::vector<int32> path_ptr;
+
       void edge_tables_reset();
       void edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope);
       void edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope);
@@ -103,22 +117,23 @@ private:
       void calc_fill();
       void draw_fill(const ARGB color);
       //FloatRect float_bounds;
-      IntRect bounds;
+
       //int32 points_count;
 public:
-     
-      void add_point(double x, double y);
-      void add_point(FloatPoint fp);
-      void add_path();
-      void load_finished();
-
-      void clear();
-      IntRect get_bounds() const;
+      IntRect bounds;
+      std::vector<FloatPoint> origin;
+      std::vector<IntPoint> work;
+      std::vector<int32> path_ptr;
+      //void draw(video_driver* screen,const ARGB outline, const ARGB fill);
+      void transform_points(const IntPoint& center, const PolarPoint& transform_value);
+      //void add_point(double x, double y);      void add_point(FloatPoint fp);      void add_path();      void load_finished();      void clear();
+      //IntRect get_bounds() const;
       //IntRect get_bounds(PolarPoint pp);
       //IntRect get_bounds();
       //IntRect transform_bounds(PolarPoint pp);
-      void transform(PolarPoint pp);
+      //void transform(PolarPoint pp);
       Poly();
+      friend class video_driver;
 };
 
 
@@ -186,18 +201,18 @@ public:
       void size_changed() {
             // boat direction to 0 degrees forward
            // double l = left, r = right, t = top, b = bottom;
-            shape.add_path();
+            /*shape.add_path();
             shape.add_point(top, (left + right) / 2 - right); // bow center
             shape.add_point((top + bottom) * 0.75 - bottom, left); // bow left connector
             shape.add_point(-bottom, left); // left bottom point
             shape.add_point(-bottom, -right); // right bottom point
             shape.add_point((top + bottom) * 0.75 - bottom, -right);// bow right connector
+            */
       }
 };
 
 enum  position_type_e
 {
-      //unknown = 0,
       gga, rmc, gns, gll
 };
 enum gnss_type
@@ -205,14 +220,13 @@ enum gnss_type
       gps, glonass, waas
 };
 extern int32 gps_session_id;
-
 struct own_vessel_class
 {
 private:
       FloatPoint position[4], meters[4];
 
-      int32 pos_index;
-      int32 heading, _heading_set, relative;
+      int32 pos_index, _heading_set, _relative;
+      double _heading;
 
       //      FloatPoint get_gps();      meters;
 
@@ -249,24 +263,24 @@ public:
             }
       };
       /////////////////////////////////////////////////////////////////////////
-      inline int32  get_heading() { return heading; }
-      void set_heading(int32 h)
+      double  heading() { return _heading; }
+      void heading(double value)
       {
-            heading = h;
+            _heading = value;
             _heading_set = 1;
       };
       /////////////////////////////////////////////////////////////////////////
-      inline int32  is_relative() { return relative; }
-      void set_relative()
+      int32  relative() { return _relative; }
+      void relative(int32 value)
       {
-            relative ^= 1;
+            _relative = value;
       }
       /////////////////////////////////////////////////////////////////////////
       own_vessel_class()
       {
             pos_index = -1;
             _heading_set = 0;
-            relative = 0;
+            _relative = 0;
       }
       int32 get_pos_index() {
             return pos_index;
@@ -288,8 +302,6 @@ struct satellite
 
       }
 };
-
-
 class satellites
 {
 
@@ -374,7 +386,6 @@ public:
             return r;
       }
 };
-
 struct map_shape {
       uint64_t last_access;
       Poly shape;

@@ -110,7 +110,7 @@ public:
       void rectangle(IntRect rct, const ARGB color);
       //void draw_line(int x1, int y1, int x2, int y2, const ARGB color);
       void draw_pix(const int32 x, const int32 y, const ARGB color);
-      void draw_shape(const Poly* sh, const ARGB fill_color, const ARGB outline_color);
+      void draw_shape(Poly* sh, const ARGB fill_color, const ARGB outline_color);
       //void draw_text(int font_index, int x, int y, std::string s, int flags);
       void draw_text(const int32 font_index, int32 x, int32 y, const std::string s, const uint32 flags, const ARGB black_swap, const ARGB white_swap);
       void draw_text(const int32 font_index, IntPoint pt, const std::string s, const uint32 flags, const ARGB black_swap, const ARGB white_swap);

@@ -125,7 +125,7 @@ public:
       int32 clear_group(int32 group_id);
       int32 add_rect(int32 group_id, int32 area_id, IntRect rct);
       int32 add_circle(int32 group_id, int32 area_id, IntCircle circle);
-      int32 add_circle(int32 group_id, int32 area_id, IntPoint center, uint32 radius);
+      int32 add_circle(int32 group_id, int32 area_id, IntPoint center, int32 radius);
       void dump();
       int32 check_point(const int32 x, const int32 y, int32& group_id, int32& area_id);
       

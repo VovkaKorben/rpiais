@@ -724,7 +724,9 @@ void video_driver::draw_image(image* img, int32 x, int32 y, int32 flags, int32 t
       //   WARN_RESTORE            WARN_RESTORE
 
 }
-
+void video_driver::draw_shape( Poly* sh, const ARGB fill_color, const ARGB outline_color){
+      sh->edge_tables_reset();
+}
 /*
 void video_driver::draw_shape(const Poly* sh, const ARGB fill_color, const ARGB outline_color)
 {
