@@ -19,6 +19,8 @@
 #define PREPARED_GPS 3
 #define PREPARED_GPS_TOTAL 4
 
+#define PREPARED_DIST_STAT 301
+
 
 class  mysql_driver
 {
@@ -45,8 +47,9 @@ public:
       int32 get_int(const std::string field_name);
       std::string get_str(const std::string field_name);
       double get_double(const std::string field_name);
+      double get_double(const uint32 field_index);
 
-      int32 exec_file(const std::string filename);
+            int32 exec_file(const std::string filename);
       int32 exec(const std::string query);
 
       bool prepare(const int index, std::string filename);
@@ -73,5 +76,5 @@ int init_db(mysql_driver* driver);
 
 
 extern mysql_driver* mysql;
-
+extern int32 gps_session_id;
 #endif

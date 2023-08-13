@@ -14,6 +14,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include  <linux/kd.h>
+//#include  <ais_types.h>
 
 
 #define FB_NO_ERROR 0;
@@ -181,7 +182,7 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
 
       SHIPLIST_RECT = { SCREEN_RECT.r - ship_list_width, SCREEN_RECT.b, SCREEN_RECT.r, SCREEN_RECT.t };
       VIEWBOX_RECT = SCREEN_RECT;// { SCREEN_RECT.l, SCREEN_RECT.b, SCREEN_RECT.r - ship_list_width, SCREEN_RECT.t };
-      VIEWBOX_RECT.offset(-CENTER.x,-CENTER.y);
+      VIEWBOX_RECT.sub(CENTER);
 
       WINDOW_RECT = SCREEN_RECT;
       WINDOW_RECT.collapse(50, 50);
@@ -190,6 +191,8 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
             perror("ioctl");
             last_error = FB_SET_KDSETMODE_FAILED;
       }
+      polydriver = new poly_driver_class(_height, 10000);
+      //et = new bucketset[_height];
       last_error = FB_NO_ERROR;
 }
 video_driver::~video_driver() {
@@ -297,7 +300,7 @@ OutCode ComputeOutCode(int32 x, int32 y)
 
       return code;
 }
-bool CohenSutherlandLineClip(int32& x0, int32& y0, int32& x1, int32& y1)
+bool CohenSutherlandLineClip(int32 x0, int32 y0, int32 x1, int32 y1)
 {
       OutCode outcode0 = ComputeOutCode(x0, y0);
       OutCode outcode1 = ComputeOutCode(x1, y1);
@@ -347,10 +350,10 @@ bool CohenSutherlandLineClip(int32& x0, int32& y0, int32& x1, int32& y1)
       return accept;
 }
 ////////////////////////////////////////////////////////////
-void video_driver::draw_line_v2(const IntPoint pt1, const IntPoint pt2, const ARGB color) {
+void video_driver::draw_line(IntPoint* pt1, IntPoint* pt2, const ARGB color) {
 
-      int32 x1 = pt1.x, y1 = pt1.y;
-      int32 x2 = pt2.x, y2 = pt2.y;
+      int32 x1 = pt1->x, y1 = pt1->y;
+      int32 x2 = pt2->x, y2 = pt2->y;
       if (!CohenSutherlandLineClip(x1, y1, x2, y2))
             return;
       int32 w = x2 - x1;
@@ -430,7 +433,19 @@ void video_driver::draw_text(const int32 font_index, int32 x, int32 y, const std
       // detect text dimensions
       int overall_width = 0, overall_count = 0;
       char_info_s* ch_info;
-      for (const char& c : s) {
+      /*
+      std::string s = "\x81";
+      int32 xxx = s.at(0);
+
+      for (int32 c = 1; c < s.size(); c++)
+      {
+            int32 xxx = s.at(c);
+            printf("[%d] %d\n", c, xxx);
+      }
+      */
+
+
+      for (const uint8& c : s) {
             ch_info = fonts[font_index].get_char_info(c);
             if (ch_info)
             {
@@ -458,7 +473,7 @@ void video_driver::draw_text(const int32 font_index, int32 x, int32 y, const std
       puint32 data;
       uint32 font_pix, clr, tmp_alpha;
       //ARGB temp_color, paste_color = color & 0xFFFFFF;
-      for (const char& c : s) {
+      for (const uint8& c : s) {
 
             if (x >= _width) return; // go away if next char outside screen
 
@@ -622,37 +637,6 @@ void video_driver::fill_rect(int32 x0, int32 y0, int32 x1, int32 y1, const ARGB 
 void video_driver::fill_rect(IntRect rct, const ARGB color) {
       fill_rect(rct.left(), rct.bottom(), rct.right(), rct.top(), color);
 }
-/*void video_driver::draw_line(int x0, int y0, int x1, int y1, const ARGB color) {
-      int w = x1 - x0;
-      int h = y1 - y0;
-      int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
-      if (w < 0) dx1 = -1; else if (w > 0) dx1 = 1;
-      if (h < 0) dy1 = -1; else if (h > 0) dy1 = 1;
-      if (w < 0) dx2 = -1; else if (w > 0) dx2 = 1;
-      int longest = abs(w);
-      int shortest = abs(h);
-      if (!(longest > shortest)) {
-            longest = abs(h);
-            shortest = abs(w);
-            if (h < 0) dy2 = -1; else if (h > 0) dy2 = 1;
-            dx2 = 0;
-      }
-      int numerator = longest >> 1;
-      for (int i = 0; i <= longest; i++) {
-            draw_pix(x0, y0, color);
-            //putpixel(x, y, color);
-            numerator += shortest;
-            if (!(numerator < longest)) {
-                  numerator -= longest;
-                  x0 += dx1;
-                  y0 += dy1;
-            }
-            else {
-                  x0 += dx2;
-                  y0 += dy2;
-            }
-      }
-}*/
 void video_driver::draw_line_fast(int y, int xs, int xe, const ARGB color)
 { //  ONLY HORIZONTAL LINES, WITHOUT ALPHA
       // check line (or part) lies in window
@@ -718,14 +702,90 @@ void video_driver::draw_image(image* img, int32 x, int32 y, int32 flags, int32 t
 
 
                   dst_current++;
-            }
-            dst_start += vinfo.xres_virtual; // proceed to next line
       }
+            dst_start += vinfo.xres_virtual; // proceed to next line
+}
       //   WARN_RESTORE            WARN_RESTORE
 
 }
-void video_driver::draw_shape( Poly* sh, const ARGB fill_color, const ARGB outline_color){
-      sh->edge_tables_reset();
+void video_driver::draw_shape(Poly* sh, const ARGB fill_color, const ARGB outline_color) {
+     
+      int32  point_index ;
+    
+     
+      if (fill_color != clNone)
+      {
+            // init edge table
+            polydriver->reset();
+            point_index = 0;
+            // fill edge table
+
+            // iterate paths
+            for (int32 path_end : sh->path_ptr)
+            {
+                  path_end--;
+                  //printf("---\ndraw_shape, points: %d\n", sh->work.size());                  //printf("---\nadd_segment: %d, %d\n", point_index, path_end);
+
+                  // add "closing" segment
+                  polydriver->add_segment(&sh->work[point_index], &sh->work[path_end]);
+
+                  // add others segments
+                  while (point_index < path_end)
+                  {
+                        //printf("add_segment: %d, %d\n", point_index, point_index + 1);
+                        polydriver->add_segment(&sh->work[point_index], &sh->work[point_index + 1]);
+                        point_index++;
+                  }
+            }
+            // each scanline
+            for (int32 y = 0; y < _height; y++)
+            {
+                  // put new vertices to active edge table
+                  polydriver->update_aet(y);
+                  polydriver->cleanup_aet(y);
+                  //printf("Line %d, aet cnt: %d\n", y, polydriver->aet.cnt);
+                  int bucket_no = 0, coordCount = 0, x1, x2;
+                  while (bucket_no < polydriver->aet.cnt)
+                  {
+                        if ((coordCount % 2) == 0)
+                              x1 = (int32)polydriver->aet.b[bucket_no].x;
+                        else
+                        {
+                              x2 = (int32)polydriver->aet.b[bucket_no].x;
+                              draw_line_fast(y, x1, x2, fill_color);
+
+                        }
+                        coordCount++;
+                        bucket_no++;
+                  }
+
+                  polydriver->update_slope();
+
+
+            }
+
+      }
+      if (outline_color != clNone)
+      {
+            point_index = 0;
+            // iterate paths
+            for (int32 path_end : sh->path_ptr)
+            {
+                  path_end--;
+                  //printf("---\ndraw_shape, points: %d\n", sh->work.size());                  //printf("---\nadd_segment: %d, %d\n", point_index, path_end);
+
+                  // draw "closing" segment
+                  draw_line(&sh->work[point_index], &sh->work[path_end], outline_color);
+                  //polydriver->add_segment();
+
+                  // add others segments
+                  while (point_index < path_end)
+                  {
+                        draw_line(&sh->work[point_index], &sh->work[point_index + 1], outline_color);
+                        point_index++;
+                  }
+            }
+      }
 }
 /*
 void video_driver::draw_shape(const Poly* sh, const ARGB fill_color, const ARGB outline_color)

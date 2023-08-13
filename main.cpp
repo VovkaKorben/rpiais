@@ -21,12 +21,21 @@
 
 
 
-const uint64_t SHAPES_UPDATE = 10 * 1000;  // 5 min for update shapes
+const uint64_t SHAPES_UPDATE = 60 * 1000;  // 5 min for update shapes
 uint64_t next_map_update;
+
 int32 min_fit, circle_radius;
+//IntRect zoomed_view;
+
+
 image* img_minus, * img_plus;
 const int32 ZOOM_BTN_MARGIN = 20;
 int32 show_info_window = 0;
+
+std::time_t global_time = 0;
+
+const int32 INFOLINE_BOX_COUNT = 5;
+IntRect infoline_rct[INFOLINE_BOX_COUNT];
 
 
 touchscreen* touchscr;
@@ -40,6 +49,20 @@ const int max_zoom_index = 9;
 const int ZOOM_RANGE[max_zoom_index] = { 50, 120,200,300, 1000, 2000, 3000, 5000,10000 };
 int zoom_index = 4;
 double  zoom, map_update_coeff;
+
+int32 update_time() {
+      std::time_t time_check = std::time(nullptr);
+      if (time_check != global_time)
+      {
+            global_time = time_check;
+            return 1;
+      }
+      return 0;
+
+
+      /// now you can format the string as you like with `strftime`
+}
+
 
 int init_sock(CSimpleIniA* ini)
 {
@@ -70,15 +93,18 @@ void zoom_changed(int32 new_zoom_index)
             new_zoom_index = max_zoom_index - 1;
       zoom_index = new_zoom_index;
       zoom = (double)min_fit / ZOOM_RANGE[zoom_index];
-
+      //zoomed_view = VIEWBOX_RECT;      zoomed_view.zoom(1 / zoom);
 }
 ////////////////////////////////////////////////////////////
 int32 load_shapes()
 {
-      IntPoint center = own_vessel.get_meters().to_int();
+      // create rect from screen and move to own pos
+      IntPoint own_center = own_vessel.get_meters().to_int();
       IntRect query_coords(VIEWBOX_RECT);
-      query_coords = query_coords.transform_bounds({ 0,0 }, { -own_vessel.heading(),  map_update_coeff });
-      query_coords.offset(center);
+      PolarPoint transform_value(-own_vessel.heading(), map_update_coeff);
+      query_coords.transform_bounds(transform_value);
+      query_coords.add(own_center);
+
       mysql->exec_prepared(PREPARED_MAP_QUERY,
             query_coords.left(),
             query_coords.bottom(),
@@ -167,126 +193,120 @@ int32  update_map_data(uint64_t& next_check)
 void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 {
       //IntRect test_box;
-      const vessel* v;
-      FloatPoint float_center,
-            own_meters = own_vessel.get_meters();
-      IntPoint int_center;
+      vessel* v;
+      FloatPoint vessel_center_f, ftmp,
+            own_center = own_vessel.get_meters();
+      IntPoint vessel_center_i, itmp;
       //    uint32 circle_size = imax((int)(6 * zoom), 3);
 
-      PolarPoint polar_pt;
+      PolarPoint polar_pt, transform_value;
+      IntRect vessel_bounds;
+      size_t n;
+      // IntRect view_box(VIEWBOX_RECT);      view_box.zoom(1 / zoom);// = view_box.transform_bounds(transform_value);
 
-      for (const auto& vx : vessels)
+      for (auto& vx : vessels)
       {
             v = &vx.second;
             if (v->pos_ok)
             {
                   // calculate vessel center (with zoom and rotation)
-                  float_center = v->gps;
-                  float_center.latlon2meter();
-
-                  float_center.substract(own_meters);
-                  polar_pt = float_center.to_polar();
+                  vessel_center_f = v->gps;
+                  vessel_center_f.latlon2meter();
+                  vessel_center_f.sub(&own_center);
+                  polar_pt = vessel_center_f.to_polar();
                   polar_pt.zoom(zoom);
                   if (own_vessel.relative())
                         polar_pt.rotate(-own_vessel.heading());
-                  int_center = polar_pt.to_int();
+                  vessel_center_i = polar_pt.to_int();
+                  vessel_center_i.add(&CENTER);
+                  //printf("VIEWBOX_RECT: %s\n", VIEWBOX_RECT.dbg().c_str());
 
 
-                  int_center.add(CENTER);
-
-                  //printf("%d %d \n", int_center.x, int_center.y);
-                  /*
                   if (v->size_ok && v->angle_ok)
                   {
-                        // rotate each point
-                        for (int p = 0; p < v->points_count; p++)
+                        transform_value = { DEG2RAD(v->heading),zoom };
+                        if (own_vessel.relative())
+                              transform_value.rotate(-own_vessel.heading());
+
+                        for (n = 0; n < v->shape.origin.size(); n++)
                         {
-                              pp2.from_float(&(v->origin[p]));
-                              pp2.zoom(zoom);
+                              ftmp = v->shape.origin[n];
+                              ftmp.transform(&transform_value);
+                              v->shape.work[n] = ftmp.to_int();
+                              v->shape.work[n].add(&vessel_center_i);
 
 
-                              // only if size and angle known - rotate
-
-
-                              {
-                                    fp.x -= v->course;
-                                    if (own_vessel.is_relative())
-                                          fp.x -= own_vessel.get_heading();
-                              }
-                              fp.to_decart();
-                              v->work[p] = fp.to_int();
-                              v->work[p].offset_add(int_center);
-
-
-                              if (p == 0)
-                                    test_box.init(v->work[p].x, v->work[p].y);
+                              if (n)
+                                    vessel_bounds.modify(&v->shape.work[n]);
                               else
-                                    test_box.modify(v->work[p].x, v->work[p].y);
-
+                                    vessel_bounds.init(&v->shape.work[n]);
                         }
-                        if (test_box.is_intersect(SCREEN_RECT))
+                        //printf("vessel_bounds: %s\n", vessel_bounds.dbg().c_str());
+                        if (vessel_bounds.is_intersect(SCREEN_RECT))
                         {
-                              screen->draw_shape(v, fill_color, outline_color);
+                              //printf("+ %s\n", v->shipname.c_str());
+                              screen->draw_shape(&v->shape, clLime, clBlack);
                               //screen->draw_text(small_font, test_box.hcenter(), test_box.vcenter(), string_format("%d", v->mmsi), 0x000000, HALIGN_CENTER | VALIGN_CENTER);
-                              //cout << i << " accepted" << "\n";
-                        }
+                        }  //else                              printf("- %s\n", v->shipname.c_str());
                   }
                   else//unknown size or angle, just draw small circle with position
                   {
-                        screen->circle({ int_center.x, int_center.y, circle_size }, 0x00000000, 0x0000FF00);
+                        screen->draw_circle({ vessel_center_i.x, vessel_center_i.y, 5 }, clBlack, clRed);
                   }
-                  */
             }
-
-
-
-
-
       }
 }
+
 void draw_shapes(const ARGB fill_color, const ARGB outline_color)
 {
       // считаем наш тестовый прямоугольник (view_box), это видимая часть
      //все вычисления приводим к центру (0,0)
 
       //rotate box and get new bounds
-      PolarPoint transform_value = { own_vessel.heading(),zoom };// 30 degrees
-      IntPoint center = own_vessel.get_meters().to_int();
-
-      IntRect view_box(VIEWBOX_RECT);
-      //view_box.offset(center);
-      //view_box = view_box.transform_bounds(center, transform_value);
-      view_box.zoom(1 / zoom);// = view_box.transform_bounds(transform_value);
+      PolarPoint transform_value(own_vessel.heading(), zoom);
+      //FloatPoint  = own_vessel.get_meters();
+      //IntPoint own_center = own_vessel.get_meters().to_int();
+      FloatPoint own_center = own_vessel.get_meters();
+      FloatPoint fp;
+      //IntRect view_box(VIEWBOX_RECT);      view_box.zoom(1 / zoom);// = view_box.transform_bounds(transform_value);
 
 
       IntRect test_box;
-      //IntRect view_box = VIEWBOX_RECT.transform_bounds({ 0,0 }, { own_vessel.heading(),1 });
+      size_t n;
+      //Poly* p;
       for (auto& sh : map_shapes)
-            //auto const & ent1 : mymap
-            //for (poly shape : shapes)
+
       {
-            //if (fill_color != clNone || outline_color != clNone) {
-                  //calculate new transormed corners
+            //p = &sh.second.shape;
+            //calculate new transormed corners
             test_box = sh.second.shape.bounds;
-            test_box.offset(-center.x, -center.y);
-            test_box = test_box.transform_bounds(transform_value);
-            if (test_box.is_intersect(view_box))
+            test_box.sub(own_center);
+            test_box.transform_bounds(transform_value);
+
+            //, own_center, nullptr);
+            if (test_box.is_intersect(VIEWBOX_RECT))
             {
                   sh.second.last_access = utc_ms(); // update using time
-                  sh.second.shape.transform_points(center, transform_value);
-                  screen->draw_shape(&sh.second.shape, clYellow, clBlack);
+
+                  // transform points
+                  for (n = 0; n < sh.second.shape.origin.size(); n++)
+                  {
+                        fp = sh.second.shape.origin[n];
+                        fp.sub(&own_center);
+                        fp.transform(&transform_value);
+                        sh.second.shape.work[n] = fp.to_int();
+                        sh.second.shape.work[n].add(&CENTER);
+                        //write_log( string_format("%d.0\t%d.0", sh.second.shape.work[n].x, sh.second.shape.work[n].y)  );
+                  }
+
+
+                  //sh.second.shape.transform_points(&transform_value, &own_center, nullptr);
+                  //sh.second.shape.copy_origin_to_work();
+                  //sh.second.shape.sub(center);
+                  //sh.second.shape.transform_points(transform_value);
+                  screen->draw_shape(&sh.second.shape, clLand, clBlack);
             }
-            //printf("draw_shapes: %s\n", new_box.dbg().c_str());
 
-            /*new_box = rotate_shape_box(&shape.second);
-            if (new_box.is_intersect(SCREEN_RECT))
-            {
-                  // check if full rotate geometry still visible
-                  new_box = rotate_shape(&shape.second);
-                  if (new_box.is_intersect(SCREEN_RECT))
-                        screen->draw_shape(&shape.second, fill_color, outline_color);
-
-            }*/
       }
 
 }
@@ -304,13 +324,13 @@ void draw_grid(double a)
             pp.angle = -a;
             pp.dist = min_fit + 3;
             ip = pp.to_int();
-            ip.add(CENTER);
-            screen->draw_line_v2(CENTER, ip, 0xF0000000);
+            ip.add(&CENTER);
+            screen->draw_line(&CENTER, &ip, 0xF0000000);
 
             // axis letters
             pp.dist += 6;
             ip = pp.to_int();
-            ip.add(CENTER);
+            ip.add(&CENTER);
             screen->draw_text(FONT_OUTLINE, ip, sides.substr(s, 1), HALIGN_CENTER | VALIGN_CENTER, clBlack, clLand);
 
             a += RAD90;
@@ -318,6 +338,7 @@ void draw_grid(double a)
       }
       int32 v, radius;
       std::string s;
+      pp.angle = 0;
       for (uint32 i = 1; i < 6; i++)
       {
             radius = i * circle_radius;
@@ -327,6 +348,7 @@ void draw_grid(double a)
             // distance marks
             pp.dist = radius;
             ip = pp.to_int();
+            ip.add(&CENTER);
             v = ZOOM_RANGE[zoom_index] / 5 * i;
             if (v >= 1000)  // make large numbers more compact
                   s = string_format("%.1f", v / 1000.0);
@@ -336,34 +358,97 @@ void draw_grid(double a)
       }
 
 }
-void draw_infoline()
-{
-      const int32 PIVOTX = CENTER.x, PIVOTY = 20,
-            SPACEX = 3, SPACEY = 1;
-      char buf[16] = { 0 };
-      using sysclock_t = std::chrono::system_clock;
+////////////////////////////////////////////////////////////
+void prepare_infoline(int32 infoline_width) {
+      const int32 BOX_SIZES[INFOLINE_BOX_COUNT] = { 54,54,86,34,68 };
+      const int32 MARGIN = 20;
 
-      std::time_t now = sysclock_t::to_time_t(sysclock_t::now());
+      // calc overall length
+      int32 sum = 0;
+      for (int32 c = 0; c < INFOLINE_BOX_COUNT; c++) {
+            sum += BOX_SIZES[c];
+      }
+      int32 interval = (infoline_width - sum - MARGIN * 2) / (INFOLINE_BOX_COUNT - 1),
+            x = MARGIN;
+      for (int32 c = 0; c < INFOLINE_BOX_COUNT; c++) {
+            infoline_rct[c] = { x ,MARGIN ,x + BOX_SIZES[c],MARGIN + 26 };
+            x = infoline_rct[c].right() + interval;
+      }
+}
+void draw_infoline() {
+      int32 x, y,
+            font_height = screen->get_font_height(FONT_NUMS) + 4;
+      for (int32 c = 0; c < INFOLINE_BOX_COUNT; c++) {
 
-      // time and date
-      std::strftime(buf, sizeof(buf), "%H:%M:%S", std::localtime(&now));
-      screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY + SPACEY, std::string(buf), VALIGN_BOTTOM | HALIGN_RIGHT, clBlack, clLand);
-      std::strftime(buf, sizeof(buf), "%a,%e %b", std::localtime(&now));
-      screen->draw_text(FONT_MONOMEDIUM, PIVOTX - SPACEX, PIVOTY - SPACEY, std::string(buf), VALIGN_TOP | HALIGN_RIGHT, clBlack, clLand);
+            x = infoline_rct[c].left() + 3;
+            y = infoline_rct[c].top() - 3;
+            screen->fill_rect(infoline_rct[c], clWhite);
+
+            //screen->draw_text(FONT_NUMS, x, y + 5, string_format("%d", c), VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clNone);
+            switch (c) {
+                  case 0: { // time-date
+                        char timeString[10];
+                        //size_t error =
+                        std::strftime(timeString, 10, "%T", std::gmtime(&global_time));
+                        screen->draw_text(FONT_NUMS, x, y, timeString, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        y -= font_height;
+                        //error = 
+                        std::strftime(timeString, 10, "%d.%m.%y", std::gmtime(&global_time));
+                        screen->draw_text(FONT_NUMS, x, y, timeString, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        break;
+                  }
+
+                  case 1: { // sunrise sunset
+                        screen->draw_text(FONT_NUMS, x, y, string_format("\x80\x87%02d:%02d", 11, 2), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        y -= font_height;
+                        screen->draw_text(FONT_NUMS, x, y, string_format("\x81\x87%02d:%02d", 5, 4), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        break;
+                  }
+                  case 2: { // latlon
+                        FloatPoint gps = own_vessel.get_pos();
+                        screen->draw_text(FONT_NUMS, x, y, deg2dms(gps.x), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        y -= font_height;
+                        screen->draw_text(FONT_NUMS, x, y, deg2dms(gps.y), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        break;
+                  }
+                  case 3: { // sats
+                        screen->draw_text(FONT_NUMS, x, y, string_format("\x82%2d", sat.get_used_count()), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        y -= font_height;
+                        screen->draw_text(FONT_NUMS, x, y, string_format("\x83%2d", sat.get_active_count()), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        break;
+                  }
+                  case 4: { // dist
 
 
-      FloatPoint gps = own_vessel.get_pos();
-      //double lon = dm_s2deg_v2(gps.x),            lat = dm_s2deg_v2(gps.y);
-      screen->draw_text(FONT_MONOMEDIUM,
-            PIVOTX + SPACEX, PIVOTY + SPACEY,
-            string_format("\x81 %.8f %.8f", gps.x, gps.y),// lon, lat),
-            VALIGN_BOTTOM | HALIGN_LEFT,
-            clBlack, clLand);
-      screen->draw_text(FONT_MONOMEDIUM, PIVOTX + SPACEX, PIVOTY - SPACEY, string_format("\x80 %d/%d", sat.get_used_count(), sat.get_active_count()), VALIGN_TOP | HALIGN_LEFT, clBlack, clLand);
+                        std::string v;
+                        if (std::isnan(own_vessel.get_dist1()))
+                              v = "\x84  \x87---.--";
+                        else
+                              v = "\x84" + format_thousand(own_vessel.get_dist1());
+                        screen->draw_text(FONT_NUMS, x, y, v, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        y -= font_height;
+                        if (std::isnan(own_vessel.get_dist2()))
+                              v = "\x84  \x87---.--";
+                        else
+                              v = "\x85" + format_thousand(own_vessel.get_dist2());
+                        screen->draw_text(FONT_NUMS, x, y, v, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                        break;
+
+
+                  }
+            }
+
+
+
+
+
+      }
+
 
 }
+////////////////////////////////////////////////////////////
 void draw_vessels_info() {
-      struct less_than_key
+      struct cmp_haversine
       {
             inline bool operator() (const int& mmsi0, const int& mmsi1)
             {
@@ -375,25 +460,29 @@ void draw_vessels_info() {
             }
       };
       const int LINE_HEIGHT = 12;
-      //int left = ;
-      //IntRect info_rect{ CENTER_X * 2 ,0,screen->get_width() -1,screen->get_height() }
       int headers[4] = { 2, 20, 85, -2 };
       //w = screen->get_width() / 3;
       screen->fill_rect(SHIPLIST_RECT, 0x30FFFFFF);
 
+      FloatPoint own_pos = own_vessel.get_pos();
       // get all MMSI to vector + alculate distance
       std::vector<int32> mmsi;
       for (std::map<int32, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {
 
             if (it->second.pos_ok)
-                  it->second.distance = it->second.gps.haversine(own_vessel.get_pos());
+            {
+                  //printf("it->second.gps: %s\n", it->second.gps.dbg().c_str());
+                  //printf("own_vessel.get_pos(): %s\n", own_vessel.get_pos().dbg().c_str());
+                  it->second.distance = it->second.gps.haversine(&own_pos);
+
+            }
             else
                   it->second.distance = INT_MAX;
             mmsi.push_back(it->first);
       }
 
       // sort mmsi by distance
-      std::sort(mmsi.begin(), mmsi.end(), less_than_key());
+      std::sort(mmsi.begin(), mmsi.end(), cmp_haversine());
 
       // draw header
 
@@ -452,7 +541,6 @@ void draw_vessels_info() {
 
 
 }
-
 void draw_track_info(int32 x, int32 y)
 {// draw last tracking
       int32 col_pos[6] = { 0,75,150,250,350 };
@@ -746,7 +834,7 @@ void video_loop_start() {
       while (true)
       {
             update_required = false;
-
+            update_required |= update_time() > 0;
             update_required |= update_nmea() > 0;
             update_required |= update_map_data(next_map_update) > 0;
             update_required |= process_touches() > 0;
@@ -820,6 +908,7 @@ void init_video(const char* buff) {
       screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
       screen->load_font(FONT_NORMAL, data_path("/img/normal_v2.png"));
       screen->load_font(FONT_MONOMEDIUM, data_path("/img/medium.png"));
+      screen->load_font(FONT_NUMS, data_path("/img/nums.png"));
       screen->set_font_interval(FONT_MONOMEDIUM, 2);
 
 
@@ -896,19 +985,21 @@ int main()
             buff = ini.GetValue("main", "video", "/dev/fb0");
             init_video(buff);
             init_touch(&ini);
+            prepare_infoline(SHIPLIST_RECT.left());
             init_database();
             init_sock(&ini);
-            own_vessel.set_pos({ 29.0,62.0 }, position_type_e::gll);
-            //own_vessel.heading(0.52359877559829887307710723054658); // 30 degrees
-            //nmea_list.push("$GNGLL,6200.00000,N,02900.00000,E,122123.00,A,A*79");
-            //sat = new sattelites();
+
+            // simulate GPS pos
+            own_vessel.set_pos({ 21.470805989743354,60.16783241839092 }, position_type_e::gll);
+            map_update_coeff = 1;
+
+
 
             zoom_changed(zoom_index);
-
             next_map_update = 0;
 
-            // simulate info bar click
-            //touchscr->simulate_click(360, 20);
+
+            //touchscr->simulate_click(360, 20);// simulate info bar click
 
 
             video_loop_start();

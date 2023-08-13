@@ -19,7 +19,8 @@ const ARGB clGray = 0x808080;
 const ARGB clRed = 0xFF0000;
 const ARGB clDkRed = 0x880000;
 
-const ARGB clGreen = 0x00FF00;
+const ARGB clLime = 0x00FF00;
+const ARGB clGreen = 0x00B000;
 const ARGB clYellow = 0xFFFF00;
 const ARGB clBlue = 0x0000FF;
 
@@ -37,6 +38,7 @@ extern IntPoint CENTER;
 #define FONT_NORMAL 1
 //#define FONT_LARGE 2
 #define FONT_MONOMEDIUM 3
+#define FONT_NUMS 4
 
 
 
@@ -94,7 +96,7 @@ private:
       
 public:
       void draw_line_fast(int y, int xs, int xe, const ARGB color);
-      void draw_line_v2(const IntPoint pt1, const IntPoint pt2, const ARGB color);
+      void draw_line( IntPoint *pt1,  IntPoint* pt2, const ARGB color);
       void draw_outline_v2(const Poly* sh, const ARGB color);
       void flip();
       video_driver(const char* devname, int _buffer_count = 1);

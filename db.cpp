@@ -10,7 +10,7 @@
 #include <regex>
 
 
-
+int32 gps_session_id;
 mysql_driver* mysql;
 bool getFirstWord(const std::string& input, std::string& word) {
       std::regex word_regex("(\\w+)");
@@ -158,6 +158,10 @@ double mysql_driver::get_double(const std::string field_name)
 {
       return     (double)(res->getDouble(field_name));
 }
+double mysql_driver::get_double(const uint32 field_index)
+{
+      return     (double)(res->getDouble(field_index));
+}
 
 int load_dicts(mysql_driver* driver)
 {
@@ -239,6 +243,8 @@ int init_db(mysql_driver* driver)
       driver->prepare(PREPARED_GPS, data_path("/sql/gps/set_gps_pos.sql"));
       driver->prepare(PREPARED_GPS_TOTAL, data_path("/sql/gps/get_gps_total.sql"));
 
+      driver->prepare(PREPARED_DIST_STAT, data_path("/sql/dist/dist_stats.sql"));
+
 
       // read last gps session ID
       if (driver->exec_file(data_path("/sql/gps/get_gps_session.sql")))
@@ -296,7 +302,7 @@ int32 mysql_driver::exec(std::string query)
             for (const std::string& single_query : query_list)
             {
 #ifdef QUERY_LOG
-                  printf("[i] Query: %s\n", single_query.c_str());
+                  printf("[i] Query:\n\t%s\n", single_query.c_str());
 #endif
                   if (!getFirstWord(single_query, command)) {
                         printf("[E] error while get query command\n");
@@ -325,6 +331,18 @@ int32 mysql_driver::exec(std::string query)
                         }
                         case 2: { // result
                               res = stmt->executeQuery(single_query);
+
+
+
+
+#ifdef QUERY_LOG
+                              sql::ResultSetMetaData * metaData = res->getMetaData();
+                              printf("\t%d col(s)\n", metaData->getColumnCount());
+                              res->last();
+                              printf("\t%d row(s)\n", res->getRow());
+                              res->beforeFirst();
+#endif
+
                               break;
                         }
                   }

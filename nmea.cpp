@@ -453,7 +453,7 @@ int _vdm(StringArrayBulk* data, std::string talker)
                   }
                   case field_indexes::lat:
                   {
-                        int t = bc.get_int(&f);
+                        int32 t = bc.get_int(&f);
                         if (t != 0x3412140) // magic nmea number, mean `LAT not available`
                         {
                               v->gps.y = t / 600000.0;
@@ -624,7 +624,7 @@ int32 parse_nmea(std::string nmea_str)
             std::string collect = "";
             for (const auto& a : data)
             {
-                  collect += a + "`";
+                  collect += a + "_";
             }
             std::cout << collect.c_str() << std::endl;
 #endif

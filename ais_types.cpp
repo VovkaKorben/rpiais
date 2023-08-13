@@ -1,8 +1,270 @@
 #include "ais_types.h"
 #include "video.h"
 
+void IntPoint::transform(const PolarPoint& transform_value) {
+      IntPoint ip(x, y);
+      //ip.sub(center);
+      PolarPoint pp = ip.to_polar();
+      pp.angle += transform_value.angle;
+      pp.dist *= transform_value.dist;
+      ip = pp.to_int();
+      //ip.add(center);
+      x = ip.x, y = ip.y;
 
-bucketset aet, * et;
+}
+void IntPoint::add(const IntPoint* pt) {
+      x += pt->x;
+      y += pt->y;
+}
+void IntPoint::sub(const IntPoint* pt) {
+      x -= pt->x;
+      y -= pt->y;
+}
+void IntPoint::add(int32 _x, int32 _y) {
+      x += _x;
+      y += _y;
+}
+std::string IntPoint::dbg() const
+{
+      return string_format("%d, %d", x, y);
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+std::string IntRect::dbg()
+{
+      return string_format("L:%d, B:%d, R:%d, T:%d", l, b, r, t);
+}
+void IntRect::collapse(int32 x, int32 y) {
+      l += x; r -= x;      b += y; t -= y;
+}
+void IntRect::zoom(double z) {
+      l = (int32)(l * z);
+      r = (int32)(r * z);
+      t = (int32)(t * z);
+      b = (int32)(b * z);
+}
+void IntRect::add(IntPoint o) {
+      l += o.x;
+      r += o.x;
+      b += o.y;
+      t += o.y;
+}
+void IntRect::add(int32 x, int32 y) {
+      l += x;
+      r += x;
+      b += y;
+      t += y;
+}
+void IntRect::sub(IntPoint o) {
+      l -= o.x;
+      r -= o.x;
+      b -= o.y;
+      t -= o.y;
+}
+void IntRect::sub(int32 x, int32 y) {
+      l -= x;
+      r -= x;
+      b -= y;
+      t -= y;
+}
+
+void IntRect::sub(FloatPoint o) {
+      l -= (int32)o.x;
+      r -= (int32)o.x;
+      b -= (int32)o.y;
+      t -= (int32)o.y;
+}
+void IntRect::sub(double x, double y) {
+      l -= (int32)x;
+      r -= (int32)x;
+      b -= (int32)y;
+      t -= (int32)y;
+}
+
+void IntRect::init(IntPoint* pt) {
+      l = r = pt->x;      b = t = pt->y;
+}
+void IntRect::modify(IntPoint * pt) {
+      l = imin(l, pt->x);
+      b = imin(b, pt->y);
+      r = imax(r, pt->x);
+      t = imax(t, pt->y);
+}
+bool IntRect::is_intersect(const IntRect& rct)
+{
+      return ((l < rct.r) && (rct.l < r) && (b < rct.t) && (rct.b < t));
+}
+IntPoint IntRect::get_corner(int32 index)
+{
+      //const int32 cornerX[4] = { 0,2,2,0 };      const int32 cornerY[4] = { 1,1,3,3 };
+
+      switch (index)
+      {
+            case 0:return { l,b };
+            case 1:return { r,b };
+            case 2:return { r,t };
+            case 3:return { l,t };
+            default: return { 0,0 };
+      }
+}
+void IntRect::transform_bounds(const PolarPoint& transform_value) {
+      IntRect rct;
+      IntPoint ip;
+      for (int32 n = 0; n < 4; n++)
+      {
+            ip = get_corner(n);
+            ip.transform(transform_value);
+            if (n)
+                  rct.modify(&ip);
+            else // init rect
+                  rct.init(&ip);
+
+      }
+      l = rct.l;
+      r = rct.r;
+      b = rct.b;
+      t = rct.t;
+}
+
+/*
+IntRect IntRect::transform_bounds(const PolarPoint& transform_value) {
+      IntRect rct;
+      IntPoint ip;
+      //printf("center: %s\n", center.dbg().c_str());
+      for (int32 n = 0; n < 4; n++)
+      {
+            ip =   get_corner(n);
+            //printf("%s\n", ip.dbg().c_str());
+            //printf("pt in: %s\n", ip.dbg().c_str());
+            // ip.x = _get_coord(cornerX[n]);            ip.y = _get_coord(cornerY[n]);
+            ip.transform(transform_value);
+            //printf("%s\n", ip.dbg().c_str());
+            if (n)
+                  rct.modify(ip.x, ip.y);
+            else // init rect
+                  rct.init(ip.x, ip.y);
+
+      }
+      return rct;
+}*/
+IntPoint IntRect::center() {
+      return { l + (r - l) / 2,b + (t - b) / 2 };
+}
+
+double FloatRect::_get_coord(int32 index)
+{
+      switch (index)
+      {
+            case 1:return b;
+            case 2:return r;
+            case 3:return t;
+            default:return l;
+      }
+}
+std::string FloatRect::dbg()
+{
+      return string_format("L:%.2f, B:%.2f, R:%.2f, T:%.2f", l, b, r, t);
+}
+FloatRect::FloatRect(IntRect rct) {
+      l = rct.l;
+      r = rct.r;
+      t = rct.t;
+      b = rct.b;
+}
+void FloatRect::zoom(double z) {
+      l *= z;
+      r *= z;
+      t *= z;
+      b *= z;
+}
+void FloatRect::offset(FloatPoint o) {
+      l += o.x;
+      r += o.x;
+      b += o.y;
+      t += o.y;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void FloatPoint::transform(const PolarPoint* transform_value) {
+
+
+
+      //IntPoint ip = to_int();
+      //ip.sub(center);
+      PolarPoint pp;
+      pp.from_float(this);
+      pp.angle += transform_value->angle;
+      pp.dist *= transform_value->dist;
+      *this = pp.to_float();
+
+
+}
+std::string  FloatPoint::dbg()
+{
+      return string_format("x:%.7f, y:%.7f", x, y);
+}
+void FloatPoint::latlon2meter() // in format(lon, lat)
+{
+      //double tx = x / PI * 180;      double ty = y / PI * 180;
+
+      x = (x * 20037508.34) / 180;
+      if (std::abs(y) >= 85.051129)
+            // The value 85.051129° is the latitude at which the full projected map becomes a square
+            y = dsign(y) * std::abs(y) * 111.132952777;
+      else
+            y = std::log(std::tan(((90 + y) * PI) / 360)) / (PI / 180);
+      y = (y * 20037508.34) / 180;
+      //return { rx,ry };
+}
+IntPoint FloatPoint::to_int()
+{
+      IntPoint ip((int32) std::round(x), (int32)std::round(y));
+      return ip;
+}
+void FloatPoint::add(FloatPoint *fp) {
+      x += fp->x;
+      y += fp->y;
+}
+void FloatPoint::sub(FloatPoint *fp) {
+      x -= fp->x;
+      y -= fp->y;
+}
+PolarPoint FloatPoint::to_polar() {
+      PolarPoint tmp;
+      if (is_zero(x))
+      {
+            if (y < 0)
+                  tmp.angle = RAD270;
+            else
+                  tmp.angle = RAD90;
+      }
+      else
+      {
+            tmp.angle = std::atan(y / x);
+            if (x < 0)
+                  tmp.angle += RAD180;
+            else if (y < 0)
+                  tmp.angle += RAD360;
+
+      }
+      tmp.dist = std::sqrt(x * x + y * y);
+      return tmp;
+}
+int32 FloatPoint::haversine(FloatPoint *fp) {
+      
+      double lat_delta = DEG2RAD(fp->y - this->y),
+            lon_delta = DEG2RAD(fp->x - this->x),
+            converted_lat1 = DEG2RAD(this->y),
+            converted_lat2 = DEG2RAD(fp->y);
+
+      double a =
+            std::pow(std::sin(lat_delta / 2), 2) + std::cos(converted_lat1) * cos(converted_lat2) * std::pow(std::sin(lon_delta / 2), 2);
+
+      double c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+      //double d = EARTH_RADIUS * c;
+
+      return int(EARTH_RADIUS * c);
+      //return 0;
+}    
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 PolarPoint IntPoint::to_polar() {
 
@@ -27,264 +289,6 @@ PolarPoint IntPoint::to_polar() {
       tmp.dist = std::sqrt(static_cast<uint64_t>(x) * x + static_cast<uint64_t>(y) * y);
       return tmp;
 }
-void IntPoint::transform(const IntPoint& center, const PolarPoint& transform_value) {
-      IntPoint ip = { x,y };
-      ip.sub(center);
-      PolarPoint pp = ip.to_polar();
-      pp.angle += transform_value.angle;
-      pp.dist *= transform_value.dist;
-      ip = pp.to_int();
-      ip.add(center);
-      x = ip.x, y = ip.y;
-
-}
-void IntPoint::transform( const PolarPoint& transform_value) {
-      IntPoint ip = { x,y };
-      //ip.sub(center);
-      PolarPoint pp = ip.to_polar();
-      pp.angle += transform_value.angle;
-      pp.dist *= transform_value.dist;
-      ip = pp.to_int();
-      //ip.add(center);
-      x = ip.x, y = ip.y;
-
-}
-void IntPoint::add(const IntPoint& pt) {
-      x += pt.x;
-      y += pt.y;
-}
-void IntPoint::sub(const IntPoint& pt) {
-      x -= pt.x;
-      y -= pt.y;
-}
-void IntPoint::add(int32 _x, int32 _y) {
-      x += _x;
-      y += _y;
-}
-std::string IntPoint::dbg() const
-{
-      return string_format("%d, %d", x, y);
-}
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-std::string IntRect::dbg()
-{
-      return string_format("L:%d, B:%d, R:%d, T:%d", l, b, r, t);
-}
-
-
-
-/*int32 IntRect::_get_coord(int32 index)
-{
-      switch (index)
-      {
-            case 1:return b;
-            case 2:return r;
-            case 3:return t;
-            default:return l;
-      }
-}*/
-void IntRect::collapse(int32 x, int32 y) {
-      l += x; r -= x;      b += y; t -= y;
-}
-void IntRect::zoom(double z) {
-      l = (int32)(l * z);
-      r = (int32)(r * z);
-      t = (int32)(t * z);
-      b = (int32)(b * z);
-}
-void IntRect::offset(IntPoint o) {
-      l += o.x;
-      r += o.x;
-      b += o.y;
-      t += o.y;
-}
-void IntRect::offset(int32 x, int32 y) {
-      l += x;
-      r += x;
-      b += y;
-      t += y;
-}
-
-void IntRect::init(int32 x, int32 y) {
-      l = r = x;      b = t = y;
-}
-void IntRect::modify(int32 x, int32 y) {
-      l = imin(l, x);
-      b = imin(b, y);
-      r = imax(r, x);
-      t = imax(t, y);
-}
-bool IntRect::is_intersect(const IntRect& rct)
-{
-      return ((l < rct.r) && (rct.l < r) && (b < rct.t) && (rct.b < t));
-}
-IntPoint IntRect::get_corner(int32 index)
-{
-      //const int32 cornerX[4] = { 0,2,2,0 };      const int32 cornerY[4] = { 1,1,3,3 };
-
-      switch (index)
-      {
-            case 0:return { l,b };
-            case 1:return { r,b };
-            case 2:return { r,t };
-            case 3:return { l,t };
-            default: return { 0,0 };
-      }
-}
-IntRect IntRect::transform_bounds(const IntPoint& center, const PolarPoint& transform_value) {
-      IntRect rct;
-      IntPoint ip;
-      //printf("center: %s\n", center.dbg().c_str());
-      for (int32 n = 0; n < 4; n++)
-      {
-            ip = get_corner(n);
-            //printf("%s\n", ip.dbg().c_str());
-            //printf("pt in: %s\n", ip.dbg().c_str());
-            // ip.x = _get_coord(cornerX[n]);            ip.y = _get_coord(cornerY[n]);
-            ip.transform(center, transform_value);
-            //printf("%s\n", ip.dbg().c_str());
-            if (n)
-                  rct.modify(ip.x, ip.y);
-            else // init rect
-                  rct.init(ip.x, ip.y);
-
-      }
-      return rct;
-}
-IntRect IntRect::transform_bounds(const PolarPoint& transform_value) {
-      IntRect rct;
-      IntPoint ip;
-      //printf("center: %s\n", center.dbg().c_str());
-      for (int32 n = 0; n < 4; n++)
-      {
-            ip = get_corner(n);
-            //printf("%s\n", ip.dbg().c_str());
-            //printf("pt in: %s\n", ip.dbg().c_str());
-            // ip.x = _get_coord(cornerX[n]);            ip.y = _get_coord(cornerY[n]);
-            ip.transform( transform_value);
-            //printf("%s\n", ip.dbg().c_str());
-            if (n)
-                  rct.modify(ip.x, ip.y);
-            else // init rect
-                  rct.init(ip.x, ip.y);
-
-      }
-      return rct;
-}
-/*void IntRect::make(int32 left, int32 bottom, int32 right, int32 top)
-{
-      c[0] = left; c[1] = bottom; c[2] = right; c[3] = top;
-}*/
-IntPoint IntRect::center() {
-      return { l + (r - l) / 2,b + (t - b) / 2 };
-}
-
-double FloatRect::_get_coord(int32 index)
-{
-      switch (index)
-      {
-            case 1:return b;
-            case 2:return r;
-            case 3:return t;
-            default:return l;
-      }
-}
-
-std::string FloatRect::dbg()
-{
-      return string_format("L:%.2f, B:%.2f, R:%.2f, T:%.2f", l, b, r, t);
-}
-FloatRect::FloatRect(IntRect rct) {
-      l = rct.l;
-      r = rct.r;
-      t = rct.t;
-      b = rct.b;
-}
-void FloatRect::zoom(double z) {
-      l *= z;
-      r *= z;
-      t *= z;
-      b *= z;
-}
-void FloatRect::offset(FloatPoint o) {
-      l += o.x;
-      r += o.x;
-      b += o.y;
-      t += o.y;
-}
-//void IntRect::collapse(const int32 x, const int32 y){}
-//IntRect::IntRect(int32 l, int32 b, int32 r, int32 t)
-//{      c[0] = l; c[1] = b; c[2] = r; c[3] = t;}
-//void IntRect::collapse(const int32 v) {      collapse(v, v);}
-//void IntRect::collapse(const int32 x, const int32 y) {      c[0] -= x; c[2] += y;      c[1] += y; c[3] -= y;}
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-IntPoint FloatPoint::transform(const IntPoint& center, const PolarPoint& transform_value) {
-
-
-
-            IntPoint ip =to_int();
-            ip.sub(center);
-            PolarPoint pp = ip.to_polar();
-            pp.angle += transform_value.angle;
-            pp.dist *= transform_value.dist;
-            ip = pp.to_int();
-           // ip.add(center);
-            return ip;
-
-
-}
-std::string  FloatPoint::dbg()
-{
-      return string_format("x:%.3f, y:%.3f", x, y);
-}
-void FloatPoint::latlon2meter() // in format(lon, lat)
-{
-      //double tx = x / PI * 180;      double ty = y / PI * 180;
-
-      x = (x * 20037508.34) / 180;
-      if (std::abs(y) >= 85.051129)
-            // The value 85.051129° is the latitude at which the full projected map becomes a square
-            y = dsign(y) * std::abs(y) * 111.132952777;
-      else
-            y = std::log(std::tan(((90 + y) * PI) / 360)) / (PI / 180);
-      y = (y * 20037508.34) / 180;
-      //return { rx,ry };
-}
-IntPoint FloatPoint::to_int()
-{
-      return { (int32)x,(int32)y };
-}
-void FloatPoint::substract(FloatPoint fp) {
-      x += fp.x;
-      y += fp.y;
-}
-PolarPoint FloatPoint::to_polar() {
-      PolarPoint tmp;
-      if (is_zero(x))
-      {
-            if (y < 0)
-                  tmp.angle = RAD270;
-            else
-                  tmp.angle = RAD90;
-      }
-      else
-      {
-            tmp.angle = std::atan(y / x);
-            if (x < 0)
-                  tmp.angle += RAD180;
-            else if (y < 0)
-                  tmp.angle += RAD360;
-
-      }
-      tmp.dist = std::sqrt(x * x + y * y);
-      return tmp;
-}
-int32 FloatPoint::haversine(FloatPoint fp) {
-      return 0;
-}
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//void _check_angle_correct;
 IntPoint PolarPoint::to_int()
 {
       IntPoint r;
@@ -302,24 +306,31 @@ void PolarPoint::add(PolarPoint pp)
             angle += RAD360;*/
 
 }
-void PolarPoint::from_float(FloatPoint* fp) {
+void PolarPoint::from_float(const FloatPoint* fp) {
       if (is_zero(fp->x))
       {
             if (fp->y < 0)
-                  angle = 270.0;
+                  angle = RAD270;
             else
-                  angle = 90.0;
+                  angle = RAD90;
       }
       else
       {
-            angle = std::atan(fp->y / fp->x) / PI * 180.0;
+            angle = std::atan(fp->y / fp->x) ;
             if (fp->x < 0)
-                  angle += 180.0;
+                  angle += RAD180;
             else if (fp->y < 0)
-                  angle += 360.0;
+                  angle += RAD360;
 
       }
       dist = std::sqrt(fp->x * fp->x + fp->y * fp->y);
+}
+FloatPoint PolarPoint::to_float() {
+
+      FloatPoint r;
+      r.x = dist * std::cos(angle);
+      r.y = dist * std::sin(angle);
+      return r;
 }
 void PolarPoint::zoom(double z) {
       dist *= z;
@@ -327,263 +338,85 @@ void PolarPoint::zoom(double z) {
 void PolarPoint::rotate(double a) {
       angle += a;
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-Poly::Poly()
+std::string PolarPoint::dbg()
 {
-      // clear();
+      return string_format("A:%.3f, D:%.3f", angle, dist);
 }
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*
-IntRect Poly::get_bounds() const {
-      return bounds;
-}
-
-void Poly::add_point(double x, double y) {
-
-      origin.push_back({ x,y });
-      path_ptr.back() = (int32)origin.size();
-      if (origin.size() == 1)
-            bounds.init((int32)x, (int32)y);
-      else
-            bounds.modify((int32)x, (int32)y);
-}
-void Poly::add_point(FloatPoint fp)
-{
-      add_point(fp.x, fp.y);
-}
-void Poly::add_path() {
-      path_ptr.push_back((int32)origin.size());
-}
-void Poly::load_finished() {
-      work.resize(origin.size());
-}void Poly::clear() {
-      origin.clear();
-      path_ptr.clear();
-}
-*/
-//void Poly::transform(PolarPoint pp) {}
-
-
-
-
-void _insertionSort(bucketset* b) {
-      double _fx, _s;
-      int j, _y, _ix;
-      for (int i = 1; i < b->cnt; i++)
-      {
-            _y = b->barr[i].y;
-            _fx = b->barr[i].fx;
-            _ix = b->barr[i].ix;
-            _s = b->barr[i].slope;
-            j = i - 1;
-            while ((j >= 0) && (_ix < b->barr[j].ix))
-            {
-                  b->barr[j + 1].y = b->barr[j].y;
-                  b->barr[j + 1].fx = b->barr[j].fx;
-                  b->barr[j + 1].ix = b->barr[j].ix;
-                  b->barr[j + 1].slope = b->barr[j].slope;
-                  j--;
-            }
-            b->barr[j + 1].y = _y;
-            b->barr[j + 1].fx = _fx;
-            b->barr[j + 1].ix = _ix;
-            b->barr[j + 1].slope = _s;
-      }
-}
-void Poly::edge_tables_reset()
-{
-      aet.cnt = 0;
-      for (int i = 0; i < screen->height(); i++)
-            et[i].cnt = 0;
-}
-void Poly::edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope)
-{
-      b->barr[b->cnt].y = y_end;
-      b->barr[b->cnt].fx = x_start;
-      b->barr[b->cnt].slope = slope;
-      b->cnt++;
-      //	_insertionSort(b);
-
-}
-void Poly::edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope)
-{
-      //if (dbg_flag)		cout << string_format("+ Added\ty: %d\tx: %.3f\ts: %.3f\n", y_end, x_start, slope);
-      b->barr[b->cnt].y = y_end;
-      b->barr[b->cnt].fx = x_start;
-      b->barr[b->cnt].ix = int(round(x_start));
-      b->barr[b->cnt].slope = slope;
-      b->cnt++;
-      //	_insertionSort(b);
-
-}
-void Poly::edge_store_table(IntPoint pt1, IntPoint pt2) {
-      double dx, dy, slope;
-
-      // if both points lies below or above viewable rect - edge skipped
-      if ((pt1.y < 0 and pt2.y < 0) || (pt1.y >= screen->height() and pt2.y >= screen->height()))
-            return;
-      dy = pt1.y - pt2.y;
-
-      // horizontal lines are not stored in edge table
-      if (dy == 0)
-            return;
-      dx = pt1.x - pt2.x;
-
-      if (is_zero(dx))
-            slope = 0.0;
-      else
-            slope = dx / dy;
-
-      //check if one point lies below view rect - recalculate intersection with zero scanline
-      if (pt1.y < 0)
-      {
-            pt1.x = int(round(pt1.x - pt1.y * slope));
-            pt1.y = 0;
-      }
-      else if (pt2.y < 0)
-      {
-            pt2.x = int(round(pt2.x - pt2.y * slope));
-            pt2.y = 0;
-
-      }
-
-      int _y, sc;
-      double  _x;
-
-      if (dy > 0)
-      {
-            sc = pt2.y;
-            _y = pt1.y;
-            _x = pt2.x;
-      }
-      else
-      {
-            sc = pt1.y;
-            _y = pt2.y;
-            _x = pt1.x;
-      }
-
-
-      //if (sc < 0 || sc >= VIEW_HEIGHT)            throw exception("incorrect scanline");
-      //cout << string_format("Store tuple:\ty: %d->%d\tx: %.3f\ts: %.3f", sc, _y, _x, slope) << endl;
-      edge_store_tuple_float(&et[sc], _y, _x, slope);
-
-
-}
-void Poly::edge_update_slope(bucketset* b) {
-      for (int i = 0; i < b->cnt; i++)
-      {
-            b->barr[i].fx += b->barr[i].slope;
-            b->barr[i].ix = int(round(b->barr[i].fx));
-      }
-}
-void Poly::edge_remove_byY(bucketset* b, int scanline_no)
-{
-      int i = 0, j;
-      while (i < b->cnt)
-      {
-            if (b->barr[i].y == scanline_no)
-            {
-                  //if (dbg_flag)				cout << string_format("- Removed\ty: %d\tx: %.3f\n", scanline_no, b->barr[i].x);
-
-                  for (j = i; j < b->cnt - 1; j++)
-                  {
-                        b->barr[j].y = b->barr[j + 1].y;
-                        b->barr[j].fx = b->barr[j + 1].fx;
-                        b->barr[j].ix = b->barr[j + 1].ix;
-                        b->barr[j].slope = b->barr[j + 1].slope;
-
-                  }
-                  b->cnt--;
-            }
-            else
-                  i++;
-      }
-}
-////////////////////////////////////////////////////////////
-void Poly::calc_fill() {
-
-      /*  IntPoint prev_point, point;
-        int path_end, point_id = 0;
-        for (int path_id = 0; path_id < sh->path_count; path_id++)
-        {
-              path_end = sh->pathindex[path_id + 1];
-              prev_point = sh->work[path_end - 1];
-              while (point_id < path_end)
-              {
-                    point = sh->work[point_id];
-                    //cout << "Process line: " << point << " -> " << prev_point << endl;
-
-                    edge_store_table(point, prev_point);
-                    prev_point = point;
-                    point_id++;
-              }
-
-        }*/
-}
-void Poly::draw_fill(const ARGB color)
-{
-
-
-
-      for (int scanline_no = 0; scanline_no < screen->height(); scanline_no++)
-      {
-            for (int b = 0; b < et[scanline_no].cnt; b++)
-            {
-                  edge_store_tuple_int(
-                        &aet,
-                        et[scanline_no].barr[b].y,
-                        et[scanline_no].barr[b].fx,
-                        et[scanline_no].barr[b].slope);
-
-            }
-
-            edge_remove_byY(&aet, scanline_no);
-            _insertionSort(&aet);
-
-
-            int bucket_no = 0, coordCount = 0, x1, x2;
-            while (bucket_no < aet.cnt)
-            {
-                  if ((coordCount % 2) == 0)
-                        x1 = aet.barr[bucket_no].ix;
-                  else
-                  {
-                        x2 = aet.barr[bucket_no].ix;
-                        screen->draw_line_fast(scanline_no, x1, x2, color);
-
-                  }
-                  coordCount++;
-                  bucket_no++;
-            }
-
-            edge_update_slope(&aet);
-      }
-
-}
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//void Poly::draw(video_driver* screen, const ARGB outline, const ARGB fill){}
-
-void Poly::transform_points(const IntPoint& center, const PolarPoint& transform_value) {
-      //IntRect rct;      IntPoint ip;
-      //printf("center: %s\n", center.dbg().c_str());
-      printf("-----------------------------\n");
+void Poly::add(const IntPoint& a) {
       for (size_t n = 0; n < origin.size(); n++)
       {
-            work[n] = origin[n].transform(center, transform_value);
-            printf("%s\n", work[n].dbg().c_str());
+            work[n].x += a.x;
+            work[n].y += a.y;
+      }
+}*/
+/*
+void Poly::transform_points_add(const PolarPoint& transform_value, const IntPoint& pt) {
+      //IntRect rct;      IntPoint ip;
+      //printf("center: %s\n", center.dbg().c_str());
+      //printf("-----------------------------\n");
+      for (size_t n = 0; n < origin.size(); n++)
+      {
+            work[n] = origin[n].transform(transform_value);
+            work[n].add(CENTER);
+      }
+}
+void Poly::transform_points_sub(const PolarPoint& transform_value,const IntPoint&pt) {
+      //IntRect rct;      IntPoint ip;
+      //printf("center: %s\n", center.dbg().c_str());
+      //printf("-----------------------------\n");
+      for (size_t n = 0; n < origin.size(); n++)
+      {
+            work[n] = origin[n].transform(transform_value);
+            work[n].add(CENTER);
+      }
+}*/
+/*void Poly::copy_origin_to_work() {
+      for (size_t n = 0; n < origin.size(); n++)
+      {
+            work[n] = origin[n].to_int();
 
       }
 }
-int32 gps_session_id;
+void Poly::sub(const IntPoint& pt) {
+      for (size_t n = 0; n < origin.size(); n++)
+      {
+            work[n].x -= pt.x;
+            work[n].y -= pt.y;
+      }
+}
+void Poly::add(const IntPoint& pt) {
+      for (size_t n = 0; n < origin.size(); n++)
+      {
+            work[n].x += pt.x;
+            work[n].y += pt.y;
+      }
+}
+*/
+void Poly::transform_points(const PolarPoint* transform_value) {
+      //IntRect rct;      IntPoint ip;
+      //printf("center: %s\n", center.dbg().c_str());
+      //printf("-----------------------------\n");
+      for (size_t n = 0; n < origin.size(); n++)
+      {
+            /*if (premod != nullptr)
+                  fp.add(*premod);
+
+            work[n] = origin[n].transform(*transform_value);
+            if (postmod != nullptr)
+                  work[n].add(*postmod);
+                  */
+      }
+}
+
+//int32 gps_session_id;
 satellites sat;
 //std::map<int, satellite> satellites;
 own_vessel_class own_vessel;
 std::map<int32, vessel> vessels;
 std::map <int32, map_shape>  map_shapes;
-
+poly_driver_class* polydriver;
 
 

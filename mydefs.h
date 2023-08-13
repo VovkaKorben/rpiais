@@ -31,7 +31,8 @@
 #define PI180 PI/180.0
 #define RAD 180/PI
 #define EARTH_RADIUS 6371008.8 // used by haversine
-#define TO_RAD(x) (x)*PI180
+#define DEG2RAD(x) (static_cast<double>(x)*PI/180.0)
+#define RAD2DEG(x) (static_cast<double>(x)*180.0/PI)
 
 typedef signed char int8;
 typedef int8* pint8;
@@ -76,7 +77,6 @@ _Pragma("warning(default  : 4267)");
 #elif __BORLANDC__ //borland 
 #elif __MINGW32__ // mingw 
 #endif
-
 
 
 inline  std::string data_path(std::string rel_path)
@@ -168,199 +168,6 @@ inline bool file_exists(const std::string& name) {
       struct stat buffer;
       return (stat(name.c_str(), &buffer) == 0);
 }
-//struct  FloatPoint;
-/*
-struct  IntPoint
-{
-      int32 x, y;
-      void offset_add(IntPoint t)
-      {
-            x += t.x;
-            y += t.y;
-      }
-      void offset_add(int32 _x, int32 _y)
-      {
-            x += _x;
-            y += _y;
-      }
-      void offset_remove(IntPoint t)
-      {
-            x -= t.x;
-            y -= t.y;
-      }
-      IntPoint offset(int32 _x, int32 _y)
-      {
-            IntPoint r;
-            r.x = x + _x;
-            r.y = y + _y;
-            return r;
-      }
-      bool is_equal(IntPoint t)
-      {
-            return (t.x == x && t.y == y);
-      }
-
-};
-
-struct  FloatPoint
-{
-
-
-      double x, y;
-      inline  void to_polar()
-      {
-            double ta;
-            if (x == 0)
-            {
-                  if (y < 0)
-                        ta = 270.0;
-                  else
-                        ta = 90.0;
-            }
-            else
-            {
-                  ta = atan(y / x) / PI * 180.0;
-                  if (x < 0)
-                        ta += 180.0;
-                  else if (y < 0)
-                        ta += 360.0;
-
-            }
-            y = sqrt(x * x + y * y);
-            x = ta;
-      }
-      inline void to_decart()
-      {
-            double ta = x * PI / 180;
-            double td = y;
-            x = td * cos(ta);
-            y = td * sin(ta);
-      }
-      inline void latlon2meter() // in format(lon, lat)
-      {
-            x = (x * 20037508.34) / 180;
-            if (std::abs(y) >= 85.051129)
-                  // The value 85.051129° is the latitude at which the full projected map becomes a square
-                  y = dsign(y) * std::abs(y) * 111.132952777;
-            else
-                  y = log(tan(((90 + y) * PI) / 360)) / (PI / 180);
-            y = (y * 20037508.34) / 180;
-      }
-      inline void offset_remove(FloatPoint fp)
-      {
-            x -= fp.x;
-            y -= fp.y;
-      }
-      int haversine(FloatPoint fp)
-      {
-            double lat_delta = TO_RAD(fp.y - this->y),
-                  lon_delta = TO_RAD(fp.x - this->x),
-                  converted_lat1 = TO_RAD(this->y),
-                  converted_lat2 = TO_RAD(fp.y);
-
-            double a =
-                  pow(sin(lat_delta / 2), 2) + cos(converted_lat1) * cos(converted_lat2) * pow(sin(lon_delta / 2), 2);
-
-            double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-            //double d = EARTH_RADIUS * c;
-
-            return int(EARTH_RADIUS * c);
-
-
-      }
-      inline IntPoint to_int()
-      {
-            return { (int)round(x),(int)round(y) };
-      }
-      inline int ix()
-      {
-            return int(round(x));
-      }
-      inline int iy()
-      {
-            return int(round(y));
-      }
-};
-
-struct IntCircle
-{
-      int32 x, y;
-      uint32 r;
-};
-struct IntRect {
-private:
-      int32 x1, y1, x2, y2;
-public:
-
-      int left() { return x1; }
-      int right() { return x2; }
-      int bottom() { return y1; }
-      int top() { return y2; }
-
-      void set_left(int v) { x1 = v; }
-      void set_right(int v) { x2 = v; }
-      void set_bottom(int v) { y1 = v; }
-      void set_top(int v) { y2 = v; }
-      IntPoint center()
-      {
-            return { x1 + (x2 - x1) / 2,y1 + (y2 - y1) / 2 };
-            //            IntPoint r;
-      }
-      IntRect() {};
-      IntRect(int l, int b, int r, int t)
-            //void assign_pos(int _x1, int _y1, int _x2, int _y2)
-      {
-            x1 = l;
-            y1 = b;
-            x2 = r;
-            y2 = t;
-      }
-      IntRect(int lr, int tb) {
-            x1 = x2 = lr;
-            y1 = y2 = tb;
-      }
-      inline bool is_intersect(IntRect rct)
-      {
-            return ((x1 < rct.x2) && (rct.right < x2) && (y1 < rct.y2) && (rct.top < y2));
-      }
-      int get_width() { return x2 - x1; }
-      int get_height() { return y2 - y1; }
-      int hcenter() { return x1 + (x2 - x1) / 2; }
-      int vcenter() { return y1 + (y2 - y1) / 2; }
-      void minmax_expand(int x, int y)
-      {
-            x1 = imin(x1, x);
-            y1 = imin(y1, y);
-            x2 = imax(x2, x);
-            y2 = imax(y2, y);
-      }
-      void minmax_expand(IntPoint pt)
-      {
-            minmax_expand(pt.x, pt.y);
-      }
-      void collapse(int w, int h)
-      {
-            x1 += w; x2 -= w;
-            y1 += h; y2 -= h;
-      }
-
-};
-struct frect {
-      double x1, y1, x2, y2;
-      FloatPoint get_corner(int index)
-      {
-            switch (index) {
-
-                  case 1:	return FloatPoint{ x2,y1 };
-                  case 2:	return FloatPoint{ x2,y2 };
-                  case 3:	return FloatPoint{ x1,y2 };
-                  case 0:
-                  default:
-                        return FloatPoint{ x1, y1 };
-            }
-      }
-};
-*/
 template<typename ... Args> inline std::string string_format(const std::string& format, Args ... args)
 {
       int size_s = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
@@ -374,13 +181,13 @@ template<typename ... Args> inline std::string string_format2(const std::string&
 {
       size_t size = std::snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
       if (size <= 0) {
-            throw std::runtime_error("string_format: error during formatting.\n"); 
+            throw std::runtime_error("string_format: error during formatting.\n");
       }
       char buff[size];
       std::snprintf(buff, size, format.c_str(), args ...);
-      std::string r = std::string(buff,size-1);
+      std::string r = std::string(buff, size - 1);
       return r;
-   //   return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
+      //   return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
 }
 
 inline std::string read_file(std::string filename) {
@@ -468,7 +275,6 @@ inline int32 search_chararray(pchar hash, pchar needle, int32 end, int32 start =
       }
       return -1;
 }
-
 inline void copy_chararray(pchar src, pchar dst, int32  start, int32 cnt) {
       pchar t_src = src, t_dst = dst;
 
@@ -520,6 +326,50 @@ inline std::string time_diff(uint64_t sec)
             if (sec < 60)
                   return string_format("%dm", sec);
       }*/
+}
+
+inline std::string deg2dms(double degrees) {
+      int32 deg = int32(degrees); // deg = 120
+      double remainder = degrees - deg; // remainder = 0.123456
+      double minutes_float = remainder * 60; // minutes_float = 7.40736
+      int32 minutes = int32(minutes_float); // minutes = 7
+      double remainder_minutes = minutes_float - minutes; // remainder_minutes = 0.40736
+      double seconds_float = remainder_minutes * 60; // seconds_float = 24.4416
+      int32 seconds = int32(seconds_float); // seconds = 24
+      int32 two_digit_remainder = int32((seconds_float - seconds) * 100); // two_digit_remainder = 44
+      return string_format("%+d\x86%.2d\"%.2d.%.2d\'", deg, minutes, seconds, two_digit_remainder);
+}
+inline std::string format_thousand(double v) {
+
+      // float part
+      std::string r = string_format(".%02d", ((int32)(v * 100)) % 100);
+
+      int32 i = (int32)v;
+      if (i >= 1000)
+            r = string_format("%2d\x87%3d", i / 1000, i % 1000) + r;
+      else
+            r = string_format("  \x87%3d", i % 1000) + r;
+      return r;
+}
+
+
+inline int32 write_log(std::string msg)
+{
+      static std::string filename = string_format("/home/pi/logs/%ld.log", utc_ms());
+      std::ofstream outFile(filename, std::ios::app);
+      if (!outFile.is_open()) {
+            std::cerr << "Error opening file " << filename << std::endl;
+            std::cerr << strerror(errno) << std::endl; // Print system error message
+            perror("Error");
+            return 1;
+      }
+
+      // Write some content to the file
+      outFile << msg << std::endl;
+
+      // Close the file
+      outFile.close();
+      return 0;
 }
 
 #endif

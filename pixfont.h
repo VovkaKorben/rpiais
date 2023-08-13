@@ -11,7 +11,15 @@ const int HALIGN_LEFT = 0x10;
 const int HALIGN_RIGHT = 0x20;
 const int HALIGN_CENTER = 0x40;
 
-
+/*
+#define CHAR_SUNRISE \x80
+#define CHAR_SUNSET \x81
+#define CHAR_SATUSED \x82
+#define CHAR_SATTOTAL \x83
+#define CHAR_DISTPART \x84
+#define CHAR_DISTALL \x85
+#define CHAR_SHORTSPACE \x85
+*/
 struct char_info_s
 {
       int32 width_start, width_end, real_width_start, real_width_end;
@@ -35,10 +43,10 @@ public:
             interval = font_interval;
       }
       // uint32 offset() { return ofs; };
-      char_info_s* get_char_info(char c)
+      char_info_s* get_char_info(uint8 charcode)
       {
 
-            size_t v = c - 32;
+            size_t v = charcode - 32;
             if (v >= char_info.size())
                   return nullptr;
             return &char_info[v];

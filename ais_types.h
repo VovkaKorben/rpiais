@@ -5,8 +5,8 @@
 #include <vector>
 #include "mydefs.h"
 #include "db.h"
-//#include "video.h"
-//  forward declarations
+#include <cmath>
+
 struct  IntPoint;
 struct  FloatPoint;
 
@@ -14,22 +14,31 @@ struct  FloatPoint;
 struct PolarPoint
 {
       double angle, dist;
-      void from_float(FloatPoint* fp);
+      void from_float(const FloatPoint* fp);
+      FloatPoint to_float();
       void add(PolarPoint pp);
       IntPoint to_int();
       void zoom(double z);
       void rotate(double a);
+      PolarPoint(double a = 0.0, double d = 1.0) : angle(a), dist(d) { }
+      std::string dbg();
+      
+      
 };
 struct  FloatPoint {
       std::string dbg();
       double x, y;
       void latlon2meter();
       IntPoint to_int();
-      void substract(FloatPoint fp);
+      void add(FloatPoint* fp);
+      void sub(FloatPoint* fp);
       PolarPoint to_polar();
-      int32 haversine(FloatPoint fp);
-      IntPoint transform(const IntPoint& center, const PolarPoint& transform_value);
-     
+      //int32 haversine(FloatPoint fp);
+      int32 haversine(FloatPoint* fp);
+      void transform(const PolarPoint* transform_value);
+      FloatPoint(double _x = 0.0, double _y = 0.0) :x(_x), y(_y) {};
+
+
 };
 struct IntPoint
 {
@@ -39,10 +48,13 @@ struct IntPoint
       void transform(const IntPoint& center, const PolarPoint& transform_value);
       void transform(const PolarPoint& transform_value);
 
-      void add(const IntPoint& ptt);
-      void sub(const IntPoint& pt);
+      void add(const IntPoint* pt);
+      void sub(const IntPoint* pt);
       void add(int32 x, int32 y);
       std::string dbg() const;
+
+      IntPoint(int32 _x = 0, int32 _y = 0) :x(_x), y(_y) {};
+
 };
 
 //rects
@@ -55,24 +67,34 @@ struct IntRect
       IntPoint get_corner(int32 index);
       //public:
       int32 left() { return l; }
+      void left(int32 _left) { l = _left; }
       int32 bottom() { return b; }
       int32 right() { return r; }
+      void right(int32 _right) { r = _right; }
       int32 top() { return t; }
       int32 width() { return r - l; }
       int32 height() { return t - b; }
 
-      void init(int32 x, int32 y);
-      void modify(int32 x, int32 y);
+      void init(IntPoint* pt);
+      void modify(IntPoint* pt);
+
+      //void init(int32 x, int32 y);      void modify(int32 x, int32 y);
       bool is_intersect(const IntRect& rct);
-      IntRect transform_bounds(const IntPoint& center, const PolarPoint& transform_value);
-      IntRect transform_bounds(const PolarPoint& transform_value);
+      //IntRect transform_bounds(const IntPoint& center, const PolarPoint& transform_value);
+      void transform_bounds(const PolarPoint& transform_value);
+      //IntRect transform(const PolarPoint& transform_value);
 
       //IntRect() {};
       //IntRect(int32 l, int32 b, int32 r, int32 t);
       void collapse(int32 x, int32 y);
       void zoom(double z);
-      void offset(IntPoint o);
-      void offset(int32 x, int32 y);
+      void add(IntPoint o);
+      void add(int32 x, int32 y);
+      void sub(IntPoint o);
+      void sub(int32 x, int32 y);
+      void sub(FloatPoint o);
+      void sub(double x, double y);
+
       IntPoint center();
 
 };
@@ -81,7 +103,7 @@ struct FloatRect
 private:
       double _get_coord(int32 index);
 public:
-      FloatRect transform(const FloatPoint& center, const PolarPoint& transform_value);
+      FloatRect transform(const PolarPoint& transform_value);
       std::string dbg();
       double l, b, r, t;
       double left() { return l; }
@@ -94,45 +116,197 @@ public:
       FloatRect(IntRect rct);
 };
 
-#define max_vertices 500
+//#define max_vertices 500
 struct bucket {
-      int y, ix;
-      double fx, slope;
+
+      float x, slope;
+      int32 ye;
 };
 struct bucketset {
-      int cnt;
-      bucket barr[max_vertices];
+      int32 cnt;
+      bucket* b;
 };
+class poly_driver_class
+{
+private:
+      int32 h, maxv;
+      bucketset aet, * et;
+public:
+      void reset() {
+            aet.cnt = 0;
+            for (int32 i = 0; i < h; i++)
+                  et[i].cnt = 0;
+      }
 
 
+      poly_driver_class(int32 height, int32 max_vertices) {
+            h = height;
+            maxv = max_vertices;
+            aet.b = new bucket[maxv];
+            //aet = new bucketset(maxv);.barr = new bucket[maxv];
+            et = new bucketset[h];
+            for (int32 y = 0; y < h; y++)
+                  et[y].b = new bucket[maxv];
+
+
+            printf("poly_driver created, height:%d, vertices: %d\n", h, maxv);
+      }
+      ~poly_driver_class() {}
+      bucket* get_inserted(float x) {
+
+            if (aet.cnt == maxv)
+                  throw "poly_driver_class: get_inserted maxv overcount";
+
+            // search insertion place
+            int32      left = 0, right = aet.cnt - 1, mid;
+            while (left <= right) {
+                  mid = left + (right - left) / 2;
+                  if (aet.b[mid].x < x)
+                        left = mid + 1;
+                  else
+                        right = mid - 1;
+            }
+
+            // move end of array to insert one element
+            for (int32 c = aet.cnt; c > left; c--) {
+                  aet.b[c] = aet.b[c - 1];
+            }
+            aet.cnt++;
+
+            //return address to new element
+            return &aet.b[left];
+      }
+      void store_vertex(int32 ys, int32 ye, float slope, float x) {
+
+            //int32 cnt = et[ys].cnt;
+            if (et[ys].cnt == maxv)
+                  throw "poly_driver_class: store_vertex maxv overcount";
+            et[ys].b[et[ys].cnt++] = { x,slope,ye };
+
+      }
+      // Функция для разбиения массива
+      int32 partition(int32 low, int32 high) {
+            double pivot = aet.b[high].x; // Опорный элемент
+            int32 i = low - 1; // Индекс элемента меньше опорного
+
+            for (int32 j = low; j < high; j++) {
+                  if (aet.b[j].x < pivot) {
+                        i++;
+                        std::swap(aet.b[i], aet.b[j]);
+                  }
+            }
+
+            std::swap(aet.b[i + 1], aet.b[high]);
+            return i + 1;
+      }
+      // Функция быстрой сортировки
+      void quickSort(int32 low, int32 high) {
+            if (low < high) {
+                  int32 pi = partition(low, high); // Индекс опорного элемента
+                  quickSort(low, pi - 1); // Сортировка элементов до опорного
+                  quickSort(pi + 1, high); // Сортировка элементов после опорного
+            }
+      }
+
+      void update_slope() {
+            for (int32 i = 0; i < aet.cnt; i++)
+                  aet.b[i].x += aet.b[i].slope;
+            // sort
+            quickSort(0, aet.cnt - 1);
+      }
+      void update_aet(int32 scanline_no) {
+            bucket* inserted;
+            for (int32 vert_no = 0; vert_no < et[scanline_no].cnt; vert_no++)
+            {
+                  inserted = get_inserted(et[scanline_no].b[vert_no].x);
+                  *inserted = et[scanline_no].b[vert_no];
+
+            }
+      }
+      void cleanup_aet(int32 scanline_no) {
+            int32 i = 0, j;
+            while (i < aet.cnt)
+            {
+                  if (aet.b[i].ye == scanline_no)
+                  {
+                        for (j = i; j < aet.cnt - 1; j++)
+                        {
+                              aet.b[j] = aet.b[j + 1];
+
+                        }
+                        aet.cnt--;
+                  }
+                  else
+                        i++;
+            }
+
+      }
+      void add_segment(IntPoint* pt1, IntPoint* pt2) {
+            int32 dx, dy;
+            float slope;
+
+            // if both points lies below or above viewable rect - edge skipped
+            if ((pt1->y < 0 && pt2->y < 0) || (pt1->y >= h && pt2->y >= h))
+                  return;
+            dy = pt1->y - pt2->y;
+
+            // horizontal lines are not stored in edge table
+            if (dy == 0)
+                  return;
+            dx = pt1->x - pt2->x;
+
+            if (dx == 0)
+                  slope = 0.0;
+            else
+                  slope = (float)dx / (float)dy;
+
+            //check if one point lies below view rect - recalculate intersection with zero scanline
+            float x;
+            int32 ys, ye;
+            if (pt1->y < 0) {
+                  x = (float)pt1->x - (float)pt1->y * slope;
+                  ys = 0;
+                  ye = pt2->y;
+            }
+            else if (pt2->y < 0) {
+                  x = (float)pt2->x - (float)pt2->y * slope;
+                  ys = 0;
+                  ye = pt1->y;
+            }
+            else if (dy > 0) {
+                  x = (float)pt2->x;
+                  ys = pt2->y;
+                  ye = pt1->y;
+            }
+            else {
+                  x = (float)pt1->x;
+                  ys = pt1->y;
+                  ye = pt2->y;
+            }
+            store_vertex(ys, ye, slope, x);
+
+      }
+      friend class video_driver;
+};
 struct Poly {
 private:
-
-      void edge_tables_reset();
-      void edge_store_tuple_float(bucketset* b, int y_end, double  x_start, double  slope);
-      void edge_store_tuple_int(bucketset* b, int y_end, double  x_start, double  slope);
-      void edge_store_table(IntPoint pt1, IntPoint pt2);
-      void edge_update_slope(bucketset* b);
-      void edge_remove_byY(bucketset* b, int scanline_no);
-      void calc_fill();
-      void draw_fill(const ARGB color);
-      //FloatRect float_bounds;
-
-      //int32 points_count;
 public:
       IntRect bounds;
       std::vector<FloatPoint> origin;
       std::vector<IntPoint> work;
       std::vector<int32> path_ptr;
-      //void draw(video_driver* screen,const ARGB outline, const ARGB fill);
-      void transform_points(const IntPoint& center, const PolarPoint& transform_value);
-      //void add_point(double x, double y);      void add_point(FloatPoint fp);      void add_path();      void load_finished();      void clear();
-      //IntRect get_bounds() const;
-      //IntRect get_bounds(PolarPoint pp);
-      //IntRect get_bounds();
-      //IntRect transform_bounds(PolarPoint pp);
-      //void transform(PolarPoint pp);
-      Poly();
+      void transform_points(const PolarPoint* transform_value);
+      //void transform_points(const PolarPoint& transform_value, FloatPoint& premod, IntPoint& postmod);
+
+      //void transform_points_add(const PolarPoint& transform_value, const IntPoint& pt);
+      //void transform_points_sub(const PolarPoint& transform_value, const IntPoint& pt);
+      /*
+      void copy_origin_to_work();
+      void sub(const IntPoint& pt);
+      void add(const IntPoint& pt);
+
+      void transform_points(const PolarPoint& transform_value);
+      */
       friend class video_driver;
 };
 
@@ -140,12 +314,10 @@ public:
 struct IntCircle {
       int32 x, y, r;
 };
-
 enum class mid_types
 {
       diverradio, ships, groupships, coaststation, saraircraft, aidtonav, auxship, aissart, mobdevice, epirb
 };
-
 struct vessel
 {
 public:
@@ -189,6 +361,12 @@ public:
             shipname = "";
             last_access = utc_ms();
 
+            // each vessel has 5 points in 1 path
+            shape.origin.resize(5);
+            shape.work.resize(5);
+            shape.path_ptr.resize(1);
+            shape.path_ptr[0] = 5;
+
             /*points_count = 5;
             origin = new FloatPoint2[5];
             work = new IntPoint2[5];
@@ -199,18 +377,19 @@ public:
             pathindex[1] = 5;*/
       }
       void size_changed() {
-            // boat direction to 0 degrees forward
-           // double l = left, r = right, t = top, b = bottom;
-            /*shape.add_path();
-            shape.add_point(top, (left + right) / 2 - right); // bow center
-            shape.add_point((top + bottom) * 0.75 - bottom, left); // bow left connector
-            shape.add_point(-bottom, left); // left bottom point
-            shape.add_point(-bottom, -right); // right bottom point
-            shape.add_point((top + bottom) * 0.75 - bottom, -right);// bow right connector
-            */
+            double l = static_cast<double>(left),
+                  r = static_cast<double>(right),
+                  b = static_cast<double>(bottom),
+                  t = static_cast<double>(top);
+            shape.origin[0] = FloatPoint(t, (l + r) / 2 - r);// bow center
+            shape.origin[1] = FloatPoint((t + b) * 0.75 - b, l);// bow left connector
+            shape.origin[2] = FloatPoint(-b, l); // left bottom point
+            shape.origin[3] = FloatPoint(-b, -r);// right bottom point
+            shape.origin[4] = FloatPoint((t + b) * 0.75 - b, -r);// bow right connector
+
+
       }
 };
-
 enum  position_type_e
 {
       gga, rmc, gns, gll
@@ -219,12 +398,12 @@ enum gnss_type
 {
       gps, glonass, waas
 };
-extern int32 gps_session_id;
+
 struct own_vessel_class
 {
 private:
       FloatPoint position[4], meters[4];
-
+      double dist1, dist2;
       int32 pos_index, _heading_set, _relative;
       double _heading;
 
@@ -240,6 +419,9 @@ public:
                   return  position[pos_index];
             else return { 0.0,0.0 };
       };
+      double get_dist1() { return dist1; }
+      double get_dist2() { return dist2; }
+
       FloatPoint get_meters()
       {
             if (pos_index >= 0)
@@ -260,6 +442,17 @@ public:
                   pos_index = int_prio;
                   mysql->exec_prepared(PREPARED_GPS, std::to_string(utc_ms()).c_str(), gps_session_id, position_gps.x, position_gps.y);
 
+
+                  //вынести эту хрень чтобы обновляла dist1 / dist2 когда у нас пишется очередные координаты гпс(~1гц)
+                    //    а не как сейчас, каждое обновление экрана(~20гц)
+                  if (!mysql->exec_prepared(PREPARED_DIST_STAT))
+                  {
+                        mysql->fetch();
+                        dist1 = mysql->get_double(1);
+                        mysql->fetch();
+                        dist2 = mysql->get_double(1);
+                  }
+                  mysql->close_res();
             }
       };
       /////////////////////////////////////////////////////////////////////////
@@ -281,6 +474,8 @@ public:
             pos_index = -1;
             _heading_set = 0;
             _relative = 0;
+            dist1 = NAN;
+            dist2 = NAN;
       }
       int32 get_pos_index() {
             return pos_index;
@@ -289,7 +484,6 @@ public:
 
 
 };
-
 struct satellite
 {
       int32 snr, elevation, azimuth;
@@ -391,6 +585,8 @@ struct map_shape {
       Poly shape;
 };
 
+// EXTERN //////////////////////////////////////////////////////////
+extern poly_driver_class* polydriver;
 extern std::map <int32, map_shape>  map_shapes;
 extern own_vessel_class own_vessel;
 extern std::map<int32, vessel> vessels;

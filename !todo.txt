@@ -1,5 +1,5 @@
 - disable f***ing tty cursor 
-	do not working on VM Box
+	do not working on VM Box!
 - take a look for long ship names in info_box
 + optimize drawmap->drawpoly->draw_outline, to not draw hidden ribs
 - add in-font icon for pos and satellites
@@ -11,7 +11,8 @@
 + make font for infoline with monospaced numbers ==>> https://github.com/Tecate/bitmap-fonts, https://www.dafont.com/bitmap.php
 - calculate heading from 2 last GPS positions
 + remove trailing zeroes from range numbers
-- show own position in deg/min/sec
++ show own position in deg/min/sec
+- check dms symbols on small screen
 + make NMEA_LIST a fifo instead of vector
 + check video_driver::circle for exceeds Y-axis (make cicrcle cache)
 - check for `socket disconnected`
@@ -27,8 +28,11 @@
    // offset MYPOS from gps center to geometrical boat center
 
 + сделать в шрифте цифры monospaced
-- время восхода и захода солнца
-- посмотреть есть ли возможность показа временной зоны
 
-привести в порядок (чтобы на входе были норм радианы)
-FloatPoint FloatPoint::latlon2meter() 
+упорядочить инфо строку, данные для показа
+	время (utc? local?)		время восхода				координаты								спутников видно/используем
+	дата					время захода				коорд ч.2								пройд путь
+	
+	посмотреть есть ли возможность показа временной зоны
+
++ привести в порядок (чтобы на входе были норм радианы) FloatPoint FloatPoint::latlon2meter() 
