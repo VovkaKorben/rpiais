@@ -30,7 +30,15 @@ int32 min_fit, circle_radius;
 
 image* img_minus, * img_plus;
 const int32 ZOOM_BTN_MARGIN = 20;
-int32 show_info_window = 0;
+
+/*
+display_win_mode - defines what exactly shows, 0 = none, 1 = time/sats, 2 = ships
+display_win_param - defines additional info, for info - win id, for ship - mmsi
+*/
+const int32 DISPLAY_WIN_NONE = 0;
+const int32 DISPLAY_WIN_INFO = 1;
+const int32 DISPLAY_WIN_VESSEL = 2;
+int32 display_win_mode, display_win_param;
 
 std::time_t global_time = 0;
 
@@ -127,12 +135,12 @@ int32 load_shapes()
             map_shapes[rec_id].shape.work.resize(points_cnt);
             points_total += points_cnt;
             map_shapes[rec_id].shape.path_ptr.resize(mysql->get_int("parts"));
-            map_shapes[rec_id].shape.bounds = {
-            mysql->get_int("minx"),
-            mysql->get_int("miny"),
-            mysql->get_int("maxx"),
-            mysql->get_int("maxy")
-            };
+            map_shapes[rec_id].shape.bounds = IntRect(
+                  mysql->get_int("minx"),
+                  mysql->get_int("miny"),
+                  mysql->get_int("maxx"),
+                  mysql->get_int("maxy")
+            );
       }
       mysql->close_res();
 
@@ -192,7 +200,7 @@ int32  update_map_data(uint64_t& next_check)
 ////////////////////////////////////////////////////////////
 void draw_vessels(const ARGB fill_color, const ARGB outline_color)
 {
-      //IntRect test_box;
+      const int32 circle_radius = 5;
       vessel* v;
       FloatPoint vessel_center_f, ftmp,
             own_center = own_vessel.get_meters();
@@ -202,6 +210,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
       PolarPoint polar_pt, transform_value;
       IntRect vessel_bounds;
       size_t n;
+      touchman->clear_group(TOUCH_GROUP_SHIPSHAPE);
       // IntRect view_box(VIEWBOX_RECT);      view_box.zoom(1 / zoom);// = view_box.transform_bounds(transform_value);
 
       for (auto& vx : vessels)
@@ -251,8 +260,10 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
                   }
                   else//unknown size or angle, just draw small circle with position
                   {
-                        screen->draw_circle({ vessel_center_i.x, vessel_center_i.y, 5 }, clBlack, clRed);
+                        screen->draw_circle({ vessel_center_i.x, vessel_center_i.y, circle_radius }, clBlack, clRed);
+                        vessel_bounds = IntRect(vessel_center_i.x- circle_radius, vessel_center_i.y- circle_radius, vessel_center_i.x+ circle_radius, vessel_center_i.y+ circle_radius);
                   }
+                  touchman->add_rect(TOUCH_GROUP_SHIPSHAPE, vx.first, vessel_bounds);
             }
       }
 }
@@ -373,7 +384,17 @@ void prepare_infoline(int32 infoline_width) {
       for (int32 c = 0; c < INFOLINE_BOX_COUNT; c++) {
             infoline_rct[c] = { x ,MARGIN ,x + BOX_SIZES[c],MARGIN + 26 };
             x = infoline_rct[c].right() + interval;
+
+            touchman->add_rect(TOUCH_GROUP_INFOLINE, c, infoline_rct[c]);
       }
+
+      /*touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
+      //  touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),CENTER_X ,40 });
+  //      touchman->add_rect(TOUCH_GROUP_INFOLINE, 1, { CENTER_X,SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
+
+      touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
+      touchman->add_rect(TOUCH_GROUP_INFOWINDOW, 0, WINDOW_RECT);
+      */
 }
 void draw_infoline() {
       int32 x, y,
@@ -459,16 +480,21 @@ void draw_vessels_info() {
 
             }
       };
-      const int LINE_HEIGHT = 12;
-      int headers[4] = { 2, 20, 85, -2 };
-      //w = screen->get_width() / 3;
-      screen->fill_rect(SHIPLIST_RECT, 0x30FFFFFF);
+      const int32 LINE_HEIGHT = 25;
+      const int32 TEXT_MARGIN = 3;
+      int32 headers[4] = { 2, 20, 85, -2 };
+      std::vector<int32> mmsi;
 
       FloatPoint own_pos = own_vessel.get_pos();
-      // get all MMSI to vector + alculate distance
-      std::vector<int32> mmsi;
-      for (std::map<int32, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {
+      touchman->clear_group(TOUCH_GROUP_SHIPLIST);
 
+      IntRect out_rect(SHIPLIST_RECT);
+      screen->fill_rect(out_rect, 0x30FFFFFF);
+
+
+
+
+      for (std::map<int32, vessel>::iterator it = vessels.begin(); it != vessels.end(); ++it) {     // get all MMSI to vector + alculate distance
             if (it->second.pos_ok)
             {
                   //printf("it->second.gps: %s\n", it->second.gps.dbg().c_str());
@@ -481,23 +507,26 @@ void draw_vessels_info() {
             mmsi.push_back(it->first);
       }
 
-      // sort mmsi by distance
-      std::sort(mmsi.begin(), mmsi.end(), cmp_haversine());
+      std::sort(mmsi.begin(), mmsi.end(), cmp_haversine());// sort mmsi by distance
 
       // draw header
 
-      int32   y_coord = SHIPLIST_RECT.top() - 2;
-      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[0], y_coord - 1, "CC", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[1], y_coord - 1, "MMSI", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[2], y_coord - 1, "SHIPNAME", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
-      screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.right() + headers[3], y_coord - 1, "DIST", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
-      y_coord -= LINE_HEIGHT;
+
+      out_rect.bottom(out_rect.top() - LINE_HEIGHT);
+
+      screen->draw_text(FONT_NORMAL, out_rect.left() + headers[0], out_rect.top() - TEXT_MARGIN, "CC", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, out_rect.left() + headers[1], out_rect.top() - TEXT_MARGIN, "MMSI", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, out_rect.left() + headers[2], out_rect.top() - TEXT_MARGIN, "SHIPNAME", VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+      screen->draw_text(FONT_NORMAL, out_rect.right() + headers[3], out_rect.top() - TEXT_MARGIN, "DIST", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+
+      out_rect.sub(0, LINE_HEIGHT);
 
       // draw ship list
-      touchman->clear_group(TOUCH_GROUP_SHIPLIST);
-      int32 lines_count = imin((int32)mmsi.size(), y_coord / LINE_HEIGHT);
+
+
+//      int32 lines_count = imin((int32)mmsi.size(), y_coord / LINE_HEIGHT);
       int32 mid;
-      for (int i = 0; i < lines_count; i++)
+      for (size_t i = 0; i < mmsi.size(); i++)
       {
             mid = vessels[mmsi[i]].mid;
             if (mid_list.count(mid) != 0)
@@ -506,12 +535,12 @@ void draw_vessels_info() {
                   if (mid_country.count(ccode) != 0)
                   {
                         //image * img = &mid_country[ccode];
-                        screen->draw_image(&mid_country[ccode], SHIPLIST_RECT.left() + 2, y_coord, VALIGN_TOP | HALIGN_LEFT);
+                        screen->draw_image(&mid_country[ccode], out_rect.left() + 2, out_rect.top(), VALIGN_TOP | HALIGN_LEFT);
                   }
             }
             else
             { // no mid info found, just out mid code
-                  screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[0], y_coord - 1, string_format("%d", mid), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+                  screen->draw_text(FONT_NORMAL, out_rect.left() + headers[0], out_rect.top() - TEXT_MARGIN, string_format("%d", mid), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
             }
             /*
                       struct mid_struct_s
@@ -523,22 +552,15 @@ void draw_vessels_info() {
                       extern std::map<std::string, image> mid_country;
                       */
 
-            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[1], y_coord - 1, string_format("%d", mmsi[i]), VALIGN_TOP | HALIGN_LEFT, clRed, clNone);
-            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.left() + headers[2], y_coord - 1, vessels[mmsi[i]].shipname, VALIGN_TOP | HALIGN_LEFT, clBlue, clNone);
-            screen->draw_text(FONT_NORMAL, SHIPLIST_RECT.right() + headers[3], y_coord - 1, string_format("%d", vessels[mmsi[i]].distance), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
-            /*
-            touchman->add_rect(
-                  TOUCH_GROUP_SHIPLIST,
-                  mmsi[i],// "ship",//std::string(),
-                  { SHIPLIST_RECT.left(),y_coord - LINE_HEIGHT,SHIPLIST_RECT.right(),y_coord });
-                  */
-            y_coord -= LINE_HEIGHT;
+            screen->draw_text(FONT_NORMAL, out_rect.left() + headers[1], out_rect.top() - TEXT_MARGIN, string_format("%d", mmsi[i]), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, out_rect.left() + headers[2], out_rect.top() - TEXT_MARGIN, vessels[mmsi[i]].shipname, VALIGN_TOP | HALIGN_LEFT, clBlack, clNone);
+            screen->draw_text(FONT_NORMAL, out_rect.right() + headers[3], out_rect.top() - TEXT_MARGIN, string_format("%d", vessels[mmsi[i]].distance), VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
+
+            touchman->add_rect(TOUCH_GROUP_SHIPLIST, mmsi[i], out_rect);
+            out_rect.sub(0, LINE_HEIGHT);
+            if (out_rect.bottom() < SHIPLIST_RECT.bottom())
+                  break;
       }
-
-
-      // draw lines
-      // 
-
 
 }
 void draw_track_info(int32 x, int32 y)
@@ -650,41 +672,37 @@ void draw_timewindow_global()
 }
 void draw_infowindow_vessel()
 {
-      vessel* v = &vessels[show_info_window];
-      if (!v) return;
+      if (!vessels.count(display_win_param)) {
+            printf("[i] draw_infowindow_vessel: mmsi %d not found.\n", display_win_param);
+            return;
+      }
+      vessel* v = &vessels[display_win_param];
       int32 x = WINDOW_RECT.left() + 5, y = WINDOW_RECT.top() - 5;
       screen->draw_text(FONT_MONOMEDIUM, x, y, "VESSEL Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone); y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
-      screen->draw_text(FONT_NORMAL, x, y, string_format("MMSI: %d", show_info_window), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
+      screen->draw_text(FONT_NORMAL, x, y, string_format("MMSI: %d", display_win_param), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
       screen->draw_text(FONT_NORMAL, x, y, string_format("GPS: %.6f,%.6f", v->gps.x, v->gps.y), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
       screen->draw_text(FONT_NORMAL, x, y, string_format("COG: %f", v->course), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
       screen->draw_text(FONT_NORMAL, x, y, string_format("Heading: %f", v->heading), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
 }
 void draw_infowindow()
 {
-      if (!show_info_window)
+      if (display_win_mode == DISPLAY_WIN_NONE)
             return;
       // draw window
       //const int32 lh = 12;
       screen->fill_rect(WINDOW_RECT, clWhite | clTransparency12);
       screen->rectangle(WINDOW_RECT, clBlack);
 
-      if (show_info_window == -2)
-      {// global info (sattelites etc)
-            draw_infowindow_global();
-
+      if (display_win_mode == DISPLAY_WIN_INFO)
+      {// global info (time/sattelites etc)
+            switch (display_win_param)
+            {
+                  case 0:draw_infowindow_global(); break;
+                  case 1:draw_timewindow_global(); break;
+            }
       }
-      else if (show_info_window == -1)
-      {// time, path, etc
-            draw_timewindow_global();
-
-      }
-      //else if (show_info_window == -2)
-      //{// global info (sattelites etc)
-      //      draw_infowindow_global();
-
-      //}
-      else if (show_info_window > 0)
-      { // ship info
+      else if (display_win_mode == DISPLAY_WIN_VESSEL)
+      {
             draw_infowindow_vessel();
       }
 
@@ -769,7 +787,8 @@ int32 process_touches() {
                         }
                         case TOUCH_GROUP_INFOLINE:
                         { // show info window
-                              show_info_window = -1 - area_id; // -1 for time, -2 for gps
+                              display_win_mode = DISPLAY_WIN_INFO;
+                              display_win_param = area_id;
 
                               // deactivate all touch groups,except window group
                               touchman->set_groups_active(0);
@@ -779,7 +798,7 @@ int32 process_touches() {
                         }
                         case TOUCH_GROUP_INFOWINDOW:
                         { // hide info window
-                              show_info_window = 0;
+                              display_win_mode = DISPLAY_WIN_NONE;
                               // enable all touch groups, disable window group
                               touchman->set_groups_active(1);
                               if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 0))
@@ -788,7 +807,8 @@ int32 process_touches() {
                         }
                         case TOUCH_GROUP_SHIPLIST:
                         {// show vessel info window
-                              show_info_window = area_id;
+                              display_win_mode = DISPLAY_WIN_VESSEL;
+                              display_win_param = area_id;
                               touchman->set_groups_active(0);                               // deactivate all touch groups,except window group
                               if (touchman->set_group_active(TOUCH_GROUP_INFOWINDOW, 1))
                                     printf("[TOUCH] error set active %d to group %d", 1, TOUCH_GROUP_INFOWINDOW);

@@ -166,10 +166,10 @@ std::string FloatRect::dbg()
       return string_format("L:%.2f, B:%.2f, R:%.2f, T:%.2f", l, b, r, t);
 }
 FloatRect::FloatRect(IntRect rct) {
-      l = rct.l;
-      r = rct.r;
-      t = rct.t;
-      b = rct.b;
+      l = rct.left();
+      r = rct.right();
+      t = rct.top();
+      b = rct.bottom();
 }
 void FloatRect::zoom(double z) {
       l *= z;

@@ -22,8 +22,8 @@ struct PolarPoint
       void rotate(double a);
       PolarPoint(double a = 0.0, double d = 1.0) : angle(a), dist(d) { }
       std::string dbg();
-      
-      
+
+
 };
 struct  FloatPoint {
       std::string dbg();
@@ -60,32 +60,27 @@ struct IntPoint
 //rects
 struct IntRect
 {
+private:
+      int32 l, b, r, t;
+public:
       std::string dbg();
       //private:
-      int32 l, b, r, t;
+
       //int32 _get_coord(int32 index);
       IntPoint get_corner(int32 index);
       //public:
-      int32 left() { return l; }
-      void left(int32 _left) { l = _left; }
-      int32 bottom() { return b; }
-      int32 right() { return r; }
-      void right(int32 _right) { r = _right; }
-      int32 top() { return t; }
+      int32 left() { return l; }          void left(int32 _left) { l = _left; }
+      int32 right() { return r; }         void right(int32 _right) { r = _right; }
+      int32 bottom() { return b; }        void bottom(int32 _bottom) { b = _bottom; }
+      int32 top() { return t; }           void top(int32 _top) { t = _top; }
       int32 width() { return r - l; }
       int32 height() { return t - b; }
 
       void init(IntPoint* pt);
       void modify(IntPoint* pt);
-
-      //void init(int32 x, int32 y);      void modify(int32 x, int32 y);
       bool is_intersect(const IntRect& rct);
-      //IntRect transform_bounds(const IntPoint& center, const PolarPoint& transform_value);
       void transform_bounds(const PolarPoint& transform_value);
-      //IntRect transform(const PolarPoint& transform_value);
 
-      //IntRect() {};
-      //IntRect(int32 l, int32 b, int32 r, int32 t);
       void collapse(int32 x, int32 y);
       void zoom(double z);
       void add(IntPoint o);
@@ -96,6 +91,8 @@ struct IntRect
       void sub(double x, double y);
 
       IntPoint center();
+
+      IntRect(int32 _l = 0, int32 _b = 0, int32 _r = 0, int32 _t = 0) :l(_l), b(_b), r(_r), t(_t) {};
 
 };
 struct FloatRect

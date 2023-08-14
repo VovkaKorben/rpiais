@@ -180,7 +180,7 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
       SCREEN_RECT = { 0, 0, _width - 1, _height - 1 };
       CENTER = { (SCREEN_RECT.width() - ship_list_width) / 2 , SCREEN_RECT.height() / 2 };
 
-      SHIPLIST_RECT = { SCREEN_RECT.r - ship_list_width, SCREEN_RECT.b, SCREEN_RECT.r, SCREEN_RECT.t };
+      SHIPLIST_RECT = { SCREEN_RECT.right() - ship_list_width, SCREEN_RECT.bottom(), SCREEN_RECT.right(), SCREEN_RECT.top() };
       VIEWBOX_RECT = SCREEN_RECT;// { SCREEN_RECT.l, SCREEN_RECT.b, SCREEN_RECT.r - ship_list_width, SCREEN_RECT.t };
       VIEWBOX_RECT.sub(CENTER);
 

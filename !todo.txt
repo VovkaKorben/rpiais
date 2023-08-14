@@ -2,7 +2,7 @@
 	do not working on VM Box!
 - take a look for long ship names in info_box
 + optimize drawmap->drawpoly->draw_outline, to not draw hidden ribs
-- add in-font icon for pos and satellites
++ add in-font icon for pos and satellites
 + touch driver - two types of points = rect and circle
 + touch driver - add pressure param
 + add large font for info window
@@ -29,10 +29,7 @@
 
 + сделать в шрифте цифры monospaced
 
-упорядочить инфо строку, данные для показа
-	время (utc? local?)		время восхода				координаты								спутников видно/используем
-	дата					время захода				коорд ч.2								пройд путь
-	
-	посмотреть есть ли возможность показа временной зоны
++ упорядочить инфо строку, данные для показа	время (utc? local?)		время восхода				координаты								спутников видно/используем	дата					время захода				коорд ч.2								пройд путь
+- посмотреть есть ли возможность показа временной зоны
 
 + привести в порядок (чтобы на входе были норм радианы) FloatPoint FloatPoint::latlon2meter() 
