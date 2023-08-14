@@ -261,7 +261,7 @@ void draw_vessels(const ARGB fill_color, const ARGB outline_color)
                   else//unknown size or angle, just draw small circle with position
                   {
                         screen->draw_circle({ vessel_center_i.x, vessel_center_i.y, circle_radius }, clBlack, clRed);
-                        vessel_bounds = IntRect(vessel_center_i.x- circle_radius, vessel_center_i.y- circle_radius, vessel_center_i.x+ circle_radius, vessel_center_i.y+ circle_radius);
+                        vessel_bounds = IntRect(vessel_center_i.x - circle_radius, vessel_center_i.y - circle_radius, vessel_center_i.x + circle_radius, vessel_center_i.y + circle_radius);
                   }
                   touchman->add_rect(TOUCH_GROUP_SHIPSHAPE, vx.first, vessel_bounds);
             }
@@ -563,6 +563,7 @@ void draw_vessels_info() {
       }
 
 }
+/*
 void draw_track_info(int32 x, int32 y)
 {// draw last tracking
       int32 col_pos[6] = { 0,75,150,250,350 };
@@ -670,6 +671,7 @@ void draw_timewindow_global()
       screen->draw_text(FONT_MONOMEDIUM, x, y, "Time Info", VALIGN_TOP | HALIGN_LEFT, clNone, clNone);//y -= 10 + screen->get_font_height(FONT_MONOMEDIUM);
 
 }
+*/
 void draw_infowindow_vessel()
 {
       if (!vessels.count(display_win_param)) {
@@ -684,6 +686,10 @@ void draw_infowindow_vessel()
       screen->draw_text(FONT_NORMAL, x, y, string_format("COG: %f", v->course), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
       screen->draw_text(FONT_NORMAL, x, y, string_format("Heading: %f", v->heading), VALIGN_TOP | HALIGN_LEFT, clBlack, clNone); y -= 4 + screen->get_font_height(FONT_NORMAL);
 }
+void draw_infowindow_time() {}
+void draw_infowindow_pos() {}
+void draw_infowindow_sat() {}
+void draw_infowindow_track() {}
 void draw_infowindow()
 {
       if (display_win_mode == DISPLAY_WIN_NONE)
@@ -697,8 +703,11 @@ void draw_infowindow()
       {// global info (time/sattelites etc)
             switch (display_win_param)
             {
-                  case 0:draw_infowindow_global(); break;
-                  case 1:draw_timewindow_global(); break;
+                  case 0:
+                  case 1:draw_infowindow_time(); break;
+                  case 2:draw_infowindow_pos(); break;
+                  case 3:draw_infowindow_sat(); break;
+                  case 4:draw_infowindow_track(); break;
             }
       }
       else if (display_win_mode == DISPLAY_WIN_VESSEL)
@@ -746,10 +755,7 @@ void draw_frame()
 
             draw_infoline();
 
-            screen->draw_text(FONT_NORMAL,
-                  SHIPLIST_RECT.left() + 5,
-                  SHIPLIST_RECT.bottom() + 5,
-                  string_format("ZOOM #%d %f", zoom_index, zoom), VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clNone);
+            //screen->draw_text(FONT_NORMAL,                  SHIPLIST_RECT.left() + 5,                  SHIPLIST_RECT.bottom() + 5,                  string_format("ZOOM #%d %f", zoom_index, zoom), VALIGN_BOTTOM | HALIGN_LEFT, clBlack, clNone);
 
             draw_infowindow();
       }
@@ -759,6 +765,7 @@ void draw_frame()
       }
 }
 ////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 int32 process_touches() {
 
       std::string msg;
@@ -766,7 +773,7 @@ int32 process_touches() {
       touches_coords_s t;
       //touchman->check_point(30, 300, gi, name);
       while (touchscr->pop(t)) {
-            PRINT_STRING(string_format("Touch: %d,%d ... \n", t.adjusted[0], t.adjusted[1]));
+            //PRINT_STRING(string_format("Touch: %d,%d ... \n", t.adjusted[0], t.adjusted[1]));
             if (touchman->check_point(t.adjusted[0], t.adjusted[1], group_id, area_id))
             {
                   //PRINT_STRING(                  string_format(printf("OK\n");
@@ -806,6 +813,7 @@ int32 process_touches() {
                               break;
                         }
                         case TOUCH_GROUP_SHIPLIST:
+                        case TOUCH_GROUP_SHIPSHAPE:
                         {// show vessel info window
                               display_win_mode = DISPLAY_WIN_VESSEL;
                               display_win_param = area_id;
@@ -817,23 +825,50 @@ int32 process_touches() {
 
                         default:
                         {
-                              printf("Unhandled touch group: %d\n", group_id);
+                              // printf("Unhandled touch group: %d\n", group_id);
                               break;
                         }
                   }
-
-                  //printf("(group %d, name: %s)\n", gi, name.c_str());
-                  //touchman->dump();
             }
-            else
-                  printf("not found\n");
+            //else                  printf("not found\n");
       }
       return 0;
-
-
-
-
 }
+void init_touch(CSimpleIniA* ini) {
+
+      touchscr = new   touchscreen(ini, screen->width(), screen->height());
+      touchman = new touch_manager();
+
+      touchman->add_group(TOUCH_GROUP_ZOOM, 15);
+      IntRect rct;
+      rct = { ZOOM_BTN_MARGIN,
+            screen->height() - ZOOM_BTN_MARGIN - img_minus->height(),
+            ZOOM_BTN_MARGIN + img_minus->width(),
+            screen->height() - ZOOM_BTN_MARGIN
+      };
+      touchman->add_circle(TOUCH_GROUP_ZOOM, TOUCH_AREA_ZOOMOUT, rct.center(), 40);
+
+      rct = { SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN - img_plus->width(),
+            screen->height() - ZOOM_BTN_MARGIN - img_plus->height(),
+            SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN,
+            screen->height() - ZOOM_BTN_MARGIN };
+      touchman->add_circle(TOUCH_GROUP_ZOOM, TOUCH_AREA_ZOOMIN, rct.center(), 40);
+
+
+      touchman->add_group(TOUCH_GROUP_SHIPSHAPE, 5);
+      touchman->add_group(TOUCH_GROUP_SHIPLIST, 12);
+      //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
+
+      touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
+      //  touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),CENTER_X ,40 });
+  //      touchman->add_rect(TOUCH_GROUP_INFOLINE, 1, { CENTER_X,SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
+
+      touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
+      touchman->add_rect(TOUCH_GROUP_INFOWINDOW, 0, WINDOW_RECT);
+
+      touchman->set_enabled(1); // tmp!!!
+}
+////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 void video_loop_start() {
       /*
@@ -913,7 +948,6 @@ void video_loop_start() {
 
         }*/
 }
-////////////////////////////////////////////////////////////
 void init_video(const char* buff) {
       screen = new video_driver(buff, 1); // debug purpose = 1 buffer, production value = 5
       if (screen->get_last_error())
@@ -938,40 +972,8 @@ void init_video(const char* buff) {
       circle_radius = min_fit / 5;
       map_update_coeff = ZOOM_RANGE[max_zoom_index - 1] / min_fit * 1.05;
 }
-void init_touch(CSimpleIniA* ini) {
-
-      touchscr = new   touchscreen(ini, screen->width(), screen->height());
-      touchman = new touch_manager();
-
-      touchman->add_group(TOUCH_GROUP_ZOOM, 15);
-      IntRect rct;
-      rct = { ZOOM_BTN_MARGIN,
-            screen->height() - ZOOM_BTN_MARGIN - img_minus->height(),
-            ZOOM_BTN_MARGIN + img_minus->width(),
-            screen->height() - ZOOM_BTN_MARGIN
-      };
-      touchman->add_circle(TOUCH_GROUP_ZOOM, TOUCH_AREA_ZOOMOUT, rct.center(), 40);
-
-      rct = { SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN - img_plus->width(),
-            screen->height() - ZOOM_BTN_MARGIN - img_plus->height(),
-            SHIPLIST_RECT.left() - ZOOM_BTN_MARGIN,
-            screen->height() - ZOOM_BTN_MARGIN };
-      touchman->add_circle(TOUCH_GROUP_ZOOM, TOUCH_AREA_ZOOMIN, rct.center(), 40);
-
-
-      touchman->add_group(TOUCH_GROUP_SHIPSHAPE, 5);
-      touchman->add_group(TOUCH_GROUP_SHIPLIST, 12);
-      //touchman->add_rect(TOUCH_GROUP_SHIPLIST, "test", { 10,20,30,40 });
-
-      touchman->add_group(TOUCH_GROUP_INFOLINE, 10);
-      //  touchman->add_rect(TOUCH_GROUP_INFOLINE, 0, { SCREEN_RECT.left(),SCREEN_RECT.bottom(),CENTER_X ,40 });
-  //      touchman->add_rect(TOUCH_GROUP_INFOLINE, 1, { CENTER_X,SCREEN_RECT.bottom(),SCREEN_RECT.right(),40 });
-
-      touchman->add_group(TOUCH_GROUP_INFOWINDOW, 30, 0);
-      touchman->add_rect(TOUCH_GROUP_INFOWINDOW, 0, WINDOW_RECT);
-
-      touchman->set_enabled(1); // tmp!!!
-}
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 void init_database() {
       mysql = new mysql_driver("127.0.0.1", "map_reader", "map_reader", "ais");
       init_db(mysql);
