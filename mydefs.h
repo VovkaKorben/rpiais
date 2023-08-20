@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <queue>
 #include <chrono>
+//#include "ais_types.h"
 
 #define PI 3.141592653589793238462643383279
 
@@ -371,5 +372,16 @@ inline int32 write_log(std::string msg)
       outFile.close();
       return 0;
 }
+/*
+inline int32 calcSolarTime(int32 c){
+      return 0;
+}
+*/
+/*
+inline int32 calcSolarTime(FloatPoint coords, int32 dayOfYear) {
+
+      return 0;
+}
+*/
 
 #endif

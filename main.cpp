@@ -40,7 +40,7 @@ const int32 DISPLAY_WIN_INFO = 1;
 const int32 DISPLAY_WIN_VESSEL = 2;
 int32 display_win_mode, display_win_param;
 
-std::time_t global_time = 0;
+std::time_t global_time = 0, sunrise, sunset;
 
 const int32 INFOLINE_BOX_COUNT = 5;
 IntRect infoline_rct[INFOLINE_BOX_COUNT];
@@ -57,12 +57,98 @@ const int max_zoom_index = 9;
 const int ZOOM_RANGE[max_zoom_index] = { 50, 120,200,300, 1000, 2000, 3000, 5000,10000 };
 int zoom_index = 4;
 double  zoom, map_update_coeff;
+int32 update_sun() {
 
+      /*   FloatPoint gps = own_vessel.get_pos();
+
+         struct tm* localTime = std::localtime(&global_time); // Преобразование в структуру tm
+         auto year = localTime->tm_year + 1900;
+         auto day = localTime->tm_mday;
+         auto month = localTime->tm_mon + 1;
+         auto N1 = floor(275 * day / 9);
+         auto N2 = floor((month + 9) / 12);
+         auto N3 = (1 + floor((year - 4 * floor(year / 4) + 2) / 3));
+         auto N = N1 - (N2 * N3) + day - 30;
+
+
+         // Рассчитываем временной угол солнца для восхода и захода
+         double solarNoon = 12.0 - (gps.x / 15.0);
+         double meanAnomaly = (0.9856 * solarNoon) - 3.289;
+
+         // Рассчитываем уравнение времени
+         double equationOfTime = 1.916 * std::sin(meanAnomaly) + 0.02 * std::sin(2.0 * meanAnomaly) + 282.634;
+
+         // Рассчитываем долготу времени восхода и захода
+         double sunriseTime = 12.0 - (equationOfTime / 15.0) - (gps.x / 15.0);
+         double sunsetTime = 12.0 + (equationOfTime / 15.0) - (gps.x / 15.0);
+
+         // Коррекция для долготы времени
+         while (sunriseTime < 0) {
+               sunriseTime += 24;
+         }
+         while (sunriseTime >= 24) {
+               sunriseTime -= 24;
+         }
+         while (sunsetTime < 0) {
+               sunsetTime += 24;
+         }
+         while (sunsetTime >= 24) {
+               sunsetTime -= 24;
+         }
+         */
+         /*SolarTime solarTime;
+         solarTime.sunrise_hour = static_cast<int>(sunriseTime);
+         solarTime.sunrise_minute = static_cast<int>((sunriseTime - solarTime.sunrise_hour) * 60);
+         solarTime.sunset_hour = static_cast<int>(sunsetTime);
+         solarTime.sunset_minute = static_cast<int>((sunsetTime - solarTime.sunset_hour) * 60);
+         */
+      return 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}
 int32 update_time() {
-      std::time_t time_check = std::time(nullptr);
-      if (time_check != global_time)
+      std::time_t new_time = std::time(nullptr);
+      if (new_time != global_time)
       {
-            global_time = time_check;
+            global_time = new_time;
+            update_sun();
             return 1;
       }
       return 0;
@@ -70,6 +156,7 @@ int32 update_time() {
 
       /// now you can format the string as you like with `strftime`
 }
+
 
 
 int init_sock(CSimpleIniA* ini)
@@ -89,6 +176,7 @@ int32  update_nmea()
             parse_nmea(nmea_str);
             c++;
       }
+      if (c)  update_sun();
       return c;
 
 }
@@ -372,7 +460,7 @@ void draw_grid(double a)
 ////////////////////////////////////////////////////////////
 void prepare_infoline(int32 infoline_width) {
       const int32 BOX_SIZES[INFOLINE_BOX_COUNT] = { 54,54,86,34,68 };
-      const int32 MARGIN = 20;
+      const int32 MARGIN = 10;
 
       // calc overall length
       int32 sum = 0;
@@ -595,7 +683,7 @@ void draw_track_info(int32 x, int32 y)
 }
 void draw_satellites_info(int32 x, int32 y)
 {
-      // satellite table header      
+      // satellite table header
       int32 col_pos[6] = { 0,25,50,75,100,400 };
       screen->draw_text(FONT_NORMAL, x + col_pos[1], y, "PRN", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
       screen->draw_text(FONT_NORMAL, x + col_pos[2], y, "El", VALIGN_TOP | HALIGN_RIGHT, clBlack, clNone);
@@ -948,23 +1036,30 @@ void video_loop_start() {
 
         }*/
 }
-void init_video(const char* buff) {
-      screen = new video_driver(buff, 1); // debug purpose = 1 buffer, production value = 5
+void init_video(CSimpleIniA* ini) {
+
+      const char* buff = ini->GetValue("main", "video", "/dev/fb0");
+      screen = new video_driver(buff, 0); // debug purpose = 1 buffer, production value = 5
       if (screen->get_last_error())
       {
             printf("video_init error: %d.\n", screen->get_last_error());
             return;
       }
-
-      //screen->fill_rect(SCREEN_RECT, clLtGray);
-      //screen->draw_text(FONT_LARGE, 100, 100, "XYZ", VALIGN_TOP | HALIGN_LEFT, clRed | clTransparency50, clNone);
-
       screen->load_font(FONT_OUTLINE, data_path("/img/outline.png"));
       screen->load_font(FONT_NORMAL, data_path("/img/normal_v2.png"));
       screen->load_font(FONT_MONOMEDIUM, data_path("/img/medium.png"));
       screen->load_font(FONT_NUMS, data_path("/img/nums.png"));
       screen->set_font_interval(FONT_MONOMEDIUM, 2);
 
+      int32 ship_list_width = (int32)ini->GetLongValue("main", "ship_list_width", 150);
+      SCREEN_RECT = IntRect(0, 0, screen->width() - 1, screen->height() - 1);
+      CENTER = { (SCREEN_RECT.width() - ship_list_width) / 2 , SCREEN_RECT.height() / 2 };
+      SHIPLIST_RECT = IntRect(SCREEN_RECT.right() - ship_list_width, SCREEN_RECT.bottom(), SCREEN_RECT.right(), SCREEN_RECT.top());
+      VIEWBOX_RECT = SCREEN_RECT;// { SCREEN_RECT.l, SCREEN_RECT.b, SCREEN_RECT.r - ship_list_width, SCREEN_RECT.t };
+      VIEWBOX_RECT.sub(CENTER);
+      WINDOW_RECT = SCREEN_RECT;
+      int32 info_margin = (int32)ini->GetLongValue("main", "info_margin", 50);
+      WINDOW_RECT.collapse(info_margin, info_margin);
 
       img_minus = new image(data_path("/img/minus_v2.png"));
       img_plus = new image(data_path("/img/plus.png"));
@@ -1003,13 +1098,19 @@ int main()
 
 
 
-            const char* buff;
-            buff = ini.GetValue("main", "video", "/dev/fb0");
-            init_video(buff);
+
+            init_video(&ini);
+
+
+
+
             init_touch(&ini);
             prepare_infoline(SHIPLIST_RECT.left());
             init_database();
             init_sock(&ini);
+
+
+
 
             // simulate GPS pos
             own_vessel.set_pos({ 21.470805989743354,60.16783241839092 }, position_type_e::gll);
@@ -1028,7 +1129,7 @@ int main()
             return 0;
       }
 
-
+#ifdef USE_JDBC
       catch (sql::SQLException& e) {
             std::cout << "# ERR: SQLException in " << __FILE__;
             std::cout << "(" << __FUNCTION__ << ") on line " << __LINE__ << std::endl;
@@ -1036,6 +1137,10 @@ int main()
             std::cout << " (MySQL error code: " << e.getErrorCode();
             std::cout << ", SQLState: " << e.getSQLState() << " )" << std::endl;
       }
+#else
+
+#endif
+
       catch (const std::runtime_error& re)
       {
             // speciffic handling for runtime_error

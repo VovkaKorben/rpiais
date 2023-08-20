@@ -167,9 +167,9 @@ std::string FloatRect::dbg()
 }
 FloatRect::FloatRect(IntRect rct) {
       l = rct.left();
+      b = rct.bottom();
       r = rct.right();
       t = rct.top();
-      b = rct.bottom();
 }
 void FloatRect::zoom(double z) {
       l *= z;

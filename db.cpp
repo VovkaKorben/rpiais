@@ -26,8 +26,6 @@ bool getFirstWord(const std::string& input, std::string& word) {
       }
       return false;
 }
-
-
 StringArray split_query(std::string query)
 {
       query = std::regex_replace(query, std::regex("--.+($|\\r|\\n)"), ""); //remove comments
@@ -58,33 +56,6 @@ StringArray split_query(std::string query)
       //std::string token = s.substr(pos, s.find(delimiter));
       return r;
 }
-/*
-std::string BeautifyQuery(std::string query)
-{
-      // printf("BeautifyQuery in -----------------------\n%s\n\n", query.c_str());
-      std::vector<std::string> rx{
-            "--.+($|\\r|\\n)", "" // remove comments
-
-                  , "\\t|\\r|\\n", " " // make tabs and new_line to space
-                  , "\\s{2,}", " " // make more two spaces into one
-                  , "^\\s", "" // remove comments
-                  , "\\s?;\\s?", ";\n" // add new line for ;
-      };
-      size_t ptr = 0;
-      std::regex r;
-      while (ptr < rx.size())
-      {
-            r = rx[ptr];
-            query = std::regex_replace(query, r, rx[ptr + 1]);
-
-            //printf("\n\nstep %d --------------------------\n%s\n", ptr, query.c_str());
-
-            ptr += 2;
-      }
-      //printf("BeautifyQuery out -----------------------\n%s\n\n", query.c_str());
-      return query;
-}
-*/
 std::string read_text(std::string filename)
 {
       std::ifstream f(filename, std::ifstream::binary);
@@ -96,7 +67,7 @@ std::string read_text(std::string filename)
       buffer << f.rdbuf();
       return buffer.str();
 }
-int mysql_driver::exec_file(std::string filename) {
+int32 mysql_driver::exec_file(std::string filename) {
 
 
       std::string query = read_text(filename);
@@ -106,9 +77,6 @@ int mysql_driver::exec_file(std::string filename) {
 
 }
 
-bool  mysql_driver::fetch() {
-      return res->next();
-}
 
 
 bool mysql_driver::prepare(const int index, std::string filename) {
@@ -122,48 +90,66 @@ bool mysql_driver::prepare(const int index, std::string filename) {
 }
 
 
-mysql_driver::mysql_driver(const char* host, const char* user, const char* pwd, const char* db) {
-      try {
-            sql::ConnectOptionsMap options;
-            options["hostName"] = host;
-            options["userName"] = user;
-            options["password"] = pwd;
-            options["schema"] = db;
-            options["port"] = 3306;
-            //options["OPT_RECONNECT"] = true;
-            options["CLIENT_MULTI_STATEMENTS"] = true;
-            options["CLIENT_MULTI_RESULTS"] = true;
-
-            sql::Driver* driver = get_driver_instance();
-            conn = driver->connect(options);
-      }
-      catch (sql::SQLException& e) {
-            std::cerr << "SQL exception in the database: "
-                  << e.what() << std::endl;
-      }
-}
-mysql_driver::~mysql_driver() {
-      delete res;
-      delete conn;
-}
 int32 mysql_driver::get_int(const std::string field_name)
 {
+#ifdef USE_JDBC
       return       res->getInt(field_name);
+#else
+      return get_int(field_by_name(field_name));
+#endif  
+}
+int32 mysql_driver::get_int(const int32 field_index)
+{
+#ifdef USE_JDBC
+      return       res->getInt(field_index);
+#else
+      if (field_index < 0 || field_index >= num_fields)
+            return 0.0;
+      return row[field_index] ? atoi(row[field_index]) : 0;
+#endif  
 }
 std::string mysql_driver::get_str(const std::string field_name)
 {
+#ifdef USE_JDBC
       return       res->getString(field_name);
+#else
+      return get_str(field_by_name(field_name));
+#endif 
+
+}
+std::string mysql_driver::get_str(const int32 field_index)
+{
+#ifdef USE_JDBC
+
+      return     res->getString(field_index);
+#else
+      if (field_index < 0 || field_index >= num_fields)
+            return "";
+      return row[field_index] ? row[field_index] : "";
+#endif 
+
 }
 double mysql_driver::get_double(const std::string field_name)
 {
+#ifdef USE_JDBC
       return     (double)(res->getDouble(field_name));
+#else
+      return get_double(field_by_name(field_name));
+#endif 
 }
-double mysql_driver::get_double(const uint32 field_index)
+double mysql_driver::get_double(const int32 field_index)
 {
+#ifdef USE_JDBC
       return     (double)(res->getDouble(field_index));
+#else
+      if (field_index < 0 || field_index >= num_fields)
+            return 0.0;
+      return row[field_index] ? atof(row[field_index]) : 0.0;
+#endif 
+
 }
 
-int load_dicts(mysql_driver* driver)
+int32 load_dicts(mysql_driver* driver)
 {
       sentences.clear(); talkers.clear(); vdm_defs.clear(); vdm_length.clear(); mid_list.clear(); mid_country.clear();
       driver->exec_file(data_path("/sql/dict/sentences.sql"));
@@ -231,7 +217,7 @@ int load_dicts(mysql_driver* driver)
 
 
 }
-int init_db(mysql_driver* driver)
+int32 init_db(mysql_driver* driver)
 {
       driver->exec_file(data_path("/sql/map/map_init.sql"));
 
@@ -273,7 +259,7 @@ void mysql_driver::_print_error(std::string msg)
    */
 }
 
-std::map< std::string, int> commands = {
+std::map< std::string, int32> commands = {
       {"UNKNOWN",0},
 
       {"DROP",1},
@@ -290,15 +276,25 @@ std::map< std::string, int> commands = {
 int32 mysql_driver::exec(std::string query)
 {
       try {
-            if (!conn->isValid())
+
+#ifdef USE_JDBC
+            if (!con->isValid())
+#else
+            if (mysql_ping(con) != 0)
+#endif
             {
                   printf("Connection is not valid\n");
-                  return 2;
+                  return 100;
             }
+
+
 
             StringArray query_list = split_query(query);
             std::string command;
-            sql::Statement* stmt = conn->createStatement();
+#ifdef USE_JDBC
+            //sql::Statement* stmt = conn->createStatement();
+            std::unique_ptr< sql::Statement > stmt(con->createStatement());
+#endif
             for (const std::string& single_query : query_list)
             {
 #ifdef QUERY_LOG
@@ -316,31 +312,68 @@ int32 mysql_driver::exec(std::string query)
                   {
                         case 0: printf("[E] this type of command don't supported\n");
                               break;
-                        case 1: { // non-result
+
+
+                        case 1: { //   DROP / INSERT / UPDATE / DELETE / CREATE
+
+#ifdef USE_JDBC
                               if (!stmt->execute(single_query))
                               {
-
+                                    
+                                    std::cout << "Query execution failed." << std::endl;
+                                    // Получение информации об ошибке
+                                    const sql::SQLWarning *e = con->getWarnings();
+                                    std::cout << "Error code: " << e->getErrorCode() << std::endl;
+                                    std::cout << "SQL State: " << e->getSQLState() << std::endl;
+                                    //std::cout << "Message: " << e->what() << std::endl;
+                                    
                                     const sql::SQLWarning* warning = stmt->getWarnings();
                                     if (warning != nullptr) {
                                           printf("[E] execute %s warn: %s\n", command.c_str(), warning->getMessage().c_str());
                                     }
-
+                                    return 200;
                               }
-
+#else
+                              if (mysql_query(con, single_query.c_str()) != 0) {
+                                    fprintf(stderr, "CREATE TABLE failed: %s\n", mysql_error(con));
+                                    return 200;
+                              }
+#endif
                               break;
                         }
-                        case 2: { // result
+
+
+                        case 2: { // SELECT
+#ifdef USE_JDBC
                               res = stmt->executeQuery(single_query);
+#else
+                              if (mysql_query(con, single_query.c_str()) != 0) {
+                                    fprintf(stderr, "Query execution failed: %s\n", mysql_error(con));
+                                    return 300;
+                              }
 
+                              res = mysql_store_result(con);
+                              if (res == NULL) {
+                                    fprintf(stderr, "mysql_store_result() failed\n");
+                                    return 400;
+                              }
 
+                              num_fields = mysql_num_fields(res);
+                              fields = mysql_fetch_fields(res);
+#endif
 
 
 #ifdef QUERY_LOG
-                              sql::ResultSetMetaData * metaData = res->getMetaData();
+#ifdef USE_JDBC
+                              // log for JDBC
+                              sql::ResultSetMetaData* metaData = res->getMetaData();
                               printf("\t%d col(s)\n", metaData->getColumnCount());
                               res->last();
                               printf("\t%d row(s)\n", res->getRow());
                               res->beforeFirst();
+#else
+                              // log for MySQL C connector
+#endif
 #endif
 
                               break;
@@ -349,13 +382,23 @@ int32 mysql_driver::exec(std::string query)
 
 
             }
-            delete stmt;
+            // delete stmt;
       }
+#ifdef USE_JDBC
       catch (sql::SQLException& e) {
-            std::cout << "# ERR: SQLException in " << __FILE__ << "(" << __FUNCTION__ << ") on line " << __LINE__ << std::endl;
-            std::cout << "# ERR: " << e.what() << " (MySQL error code: " << e.getErrorCode() << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+            std::cout << "SQL Exception:" << std::endl;
+            std::cout << "Error Code: " << e.getErrorCode() << std::endl;
+            std::cout << "SQL State: " << e.getSQLState() << std::endl;
+            std::cout << "Message: " << e.what() << std::endl;
       }
-
+#else
+      catch (...)
+      {
+            //       catch (sql::SQLException& e) {
+              //     std::cout << "# ERR: SQLException in " << __FILE__ << "(" << __FUNCTION__ << ") on line " << __LINE__ << std::endl;
+                //   std::cout << "# ERR: " << e.what() << " (MySQL error code: " << e.getErrorCode() << ", SQLState: " << e.getSQLState() << " )" << std::endl;
+      }
+#endif
 
       return 0;
 

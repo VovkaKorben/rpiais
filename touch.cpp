@@ -397,9 +397,9 @@ int32 touch_manager::add_circle(int32 group_id, int32 area_id, IntCircle circle)
       if (group == nullptr) return 1;
       touch_coords figure;
       figure.type = TOUCH_TYPE_CIRCLE;
-      figure.coords[0] = circle.x;
-      figure.coords[1] = circle.y;
-      figure.coords[2] = circle.r;
+      figure.coords[0] = circle.x();
+      figure.coords[1] = circle.y();
+      figure.coords[2] = circle.r();
       figure.id = area_id;
       group->areas.push_back(figure);
       return 0;
@@ -464,11 +464,11 @@ void touch_manager::debug(video_driver* scr) {
             {
                   switch (tmp.type) {
                         case TOUCH_TYPE_RECT: {
-                              scr->rectangle({ tmp.coords[0], tmp.coords[1], tmp.coords[2], tmp.coords[3] }, clr);
+                              scr->rectangle(IntRect( tmp.coords[0], tmp.coords[1], tmp.coords[2], tmp.coords[3] ), clr);
                               break;
                         }
                         case TOUCH_TYPE_CIRCLE: {
-                              scr->draw_circle({ tmp.coords[0], tmp.coords[1],tmp.coords[2] }, clr, clNone);
+                              scr->draw_circle( IntCircle( tmp.coords[0], tmp.coords[1],tmp.coords[2] ), clr, clNone);
                               break;
                         }
                   }

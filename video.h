@@ -102,8 +102,8 @@ public:
       video_driver(const char* devname, int _buffer_count = 1);
       ~video_driver();
       int get_last_error() { return last_error; };
-      int width() { return _width; };
-      int height() { return _height; };
+      int32 width() { return _width; };
+      int32 height() { return _height; };
       bool load_font(const int index, const std::string filename);
       int32 get_font_height(const int32 font_index);
       int32 set_font_interval(const int32 font_index, const int32 font_interval);

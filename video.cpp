@@ -176,16 +176,7 @@ video_driver::video_driver(const char* devname, int _buffer_count) {
       pix_buf = (PXPTR)tmp_offscreen;
 
       // creating rects
-      const int32 ship_list_width = 300;
-      SCREEN_RECT = { 0, 0, _width - 1, _height - 1 };
-      CENTER = { (SCREEN_RECT.width() - ship_list_width) / 2 , SCREEN_RECT.height() / 2 };
 
-      SHIPLIST_RECT = { SCREEN_RECT.right() - ship_list_width, SCREEN_RECT.bottom(), SCREEN_RECT.right(), SCREEN_RECT.top() };
-      VIEWBOX_RECT = SCREEN_RECT;// { SCREEN_RECT.l, SCREEN_RECT.b, SCREEN_RECT.r - ship_list_width, SCREEN_RECT.t };
-      VIEWBOX_RECT.sub(CENTER);
-
-      WINDOW_RECT = SCREEN_RECT;
-      WINDOW_RECT.collapse(50, 50);
 
       if (ioctl(fbdev, KDSETMODE, KD_GRAPHICS)) {
             perror("ioctl");
@@ -543,15 +534,15 @@ void video_driver::draw_text(const int32 font_index, int32 x, int32 y, const std
 void video_driver::draw_circle(const IntCircle circle, const ARGB outline, const ARGB fill) {
 
       if (fill != clNone) {
-            int f = 1 - circle.r;
+            int f = 1 - circle.r();
             int ddF_x = 0;
-            int ddF_y = -2 * circle.r;
+            int ddF_y = -2 * circle.r();
             int x = 0;
-            int y = circle.r;
+            int y = circle.r();
 
-            draw_line_fast(circle.y, circle.x - circle.r, circle.x + circle.r, fill);
-            draw_pix(circle.x, circle.y + circle.r, fill);
-            draw_pix(circle.x, circle.y - circle.r, fill);
+            draw_line_fast(circle.y(), circle.x() - circle.r(), circle.x() + circle.r(), fill);
+            draw_pix(circle.x(), circle.y() + circle.r(), fill);
+            draw_pix(circle.x(), circle.y() - circle.r(), fill);
 
 
 
@@ -567,29 +558,29 @@ void video_driver::draw_circle(const IntCircle circle, const ARGB outline, const
                   ddF_x += 2;
                   f += ddF_x + 1;
 
-                  draw_line_fast(circle.y + y, circle.x - x, circle.x + x, fill);
-                  draw_line_fast(circle.y - y, circle.x - x, circle.x + x, fill);
+                  draw_line_fast(circle.y() + y, circle.x() - x, circle.x() + x, fill);
+                  draw_line_fast(circle.y() - y, circle.x() - x, circle.x() + x, fill);
 
-                  draw_line_fast(circle.y - x, circle.x - y, circle.x + y, fill);
-                  draw_line_fast(circle.y + x, circle.x - y, circle.x + y, fill);
+                  draw_line_fast(circle.y() - x, circle.x() - y, circle.x() + y, fill);
+                  draw_line_fast(circle.y() + x, circle.x() - y, circle.x() + y, fill);
 
 
             }
       }
       if (outline != clNone) {
 
-            int f = 1 - circle.r;
+            int f = 1 - circle.r();
             int ddF_x = 0;
-            int ddF_y = -2 * circle.r;
+            int ddF_y = -2 * circle.r();
             int x = 0;
-            int y = circle.r;
+            int y = circle.r();
 
 
 
-            draw_pix(circle.x - x, circle.y + circle.r, outline);
-            draw_pix(circle.x - x, circle.y - circle.r, outline);
-            draw_pix(circle.x - x + circle.r, circle.y, outline);
-            draw_pix(circle.x - x - circle.r, circle.y, outline);
+            draw_pix(circle.x() - x, circle.y() + circle.r(), outline);
+            draw_pix(circle.x() - x, circle.y() - circle.r(), outline);
+            draw_pix(circle.x() - x + circle.r(), circle.y(), outline);
+            draw_pix(circle.x() - x - circle.r(), circle.y(), outline);
 
             while (x < y)
             {
@@ -604,14 +595,14 @@ void video_driver::draw_circle(const IntCircle circle, const ARGB outline, const
                   f += ddF_x + 1;
 
 
-                  draw_pix(circle.x + x, circle.y + y, outline);
-                  draw_pix(circle.x - x, circle.y + y, outline);
-                  draw_pix(circle.x + x, circle.y - y, outline);
-                  draw_pix(circle.x - x, circle.y - y, outline);
-                  draw_pix(circle.x + y, circle.y + x, outline);
-                  draw_pix(circle.x - y, circle.y + x, outline);
-                  draw_pix(circle.x + y, circle.y - x, outline);
-                  draw_pix(circle.x - y, circle.y - x, outline);
+                  draw_pix(circle.x() + x, circle.y() + y, outline);
+                  draw_pix(circle.x() - x, circle.y() + y, outline);
+                  draw_pix(circle.x() + x, circle.y() - y, outline);
+                  draw_pix(circle.x() - x, circle.y() - y, outline);
+                  draw_pix(circle.x() + y, circle.y() + x, outline);
+                  draw_pix(circle.x() - y, circle.y() + x, outline);
+                  draw_pix(circle.x() + y, circle.y() - x, outline);
+                  draw_pix(circle.x() - y, circle.y() - x, outline);
             }
       }
 
@@ -702,17 +693,17 @@ void video_driver::draw_image(image* img, int32 x, int32 y, int32 flags, int32 t
 
 
                   dst_current++;
-      }
+            }
             dst_start += vinfo.xres_virtual; // proceed to next line
-}
+      }
       //   WARN_RESTORE            WARN_RESTORE
 
 }
 void video_driver::draw_shape(Poly* sh, const ARGB fill_color, const ARGB outline_color) {
-     
-      int32  point_index ;
-    
-     
+
+      int32  point_index;
+
+
       if (fill_color != clNone)
       {
             // init edge table

@@ -69,12 +69,12 @@ public:
       //int32 _get_coord(int32 index);
       IntPoint get_corner(int32 index);
       //public:
-      int32 left() { return l; }          void left(int32 _left) { l = _left; }
-      int32 right() { return r; }         void right(int32 _right) { r = _right; }
-      int32 bottom() { return b; }        void bottom(int32 _bottom) { b = _bottom; }
-      int32 top() { return t; }           void top(int32 _top) { t = _top; }
-      int32 width() { return r - l; }
-      int32 height() { return t - b; }
+      int32 left()const { return l; }          void left(int32 _left) { l = _left; }
+      int32 right() const { return r; }         void right(int32 _right) { r = _right; }
+      int32 bottom()const { return b; }        void bottom(int32 _bottom) { b = _bottom; }
+      int32 top()const { return t; }           void top(int32 _top) { t = _top; }
+      int32 width()const { return r - l; }
+      int32 height()const { return t - b; }
 
       void init(IntPoint* pt);
       void modify(IntPoint* pt);
@@ -98,19 +98,22 @@ public:
 struct FloatRect
 {
 private:
+      double l, b, r, t;
       double _get_coord(int32 index);
 public:
       FloatRect transform(const PolarPoint& transform_value);
       std::string dbg();
-      double l, b, r, t;
-      double left() { return l; }
-      double bottom() { return b; }
-      double right() { return r; }
-      double top() { return t; }
+      
+      double left() const { return l; }          void left(double _left) { l = _left; }
+      double right() const { return r; }         void right(double _right) { r = _right; }
+      double bottom()const { return b; }        void bottom(double _bottom) { b = _bottom; }
+      double top() const { return t; }           void top(double _top) { t = _top; }
+
+     
       void zoom(double z);
       void offset(FloatPoint o);
-      FloatRect() {}
       FloatRect(IntRect rct);
+      FloatRect(double _l = 0.0,double _b = 0.0, double _r = 0.0, double _t = 0.0) :l(_l), b(_b), r(_r), t(_t) {};
 };
 
 //#define max_vertices 500
@@ -309,7 +312,13 @@ public:
 
 
 struct IntCircle {
-      int32 x, y, r;
+private:
+      int32 cx, cy, radius;
+public:
+      int32 x() const { return cx; }          void left(int32 _x) { cx = _x; }
+      int32 y()const { return cy; }         void right(int32 _y) { cy = _y; }
+      int32 r() const { return radius; }        void bottom(int32 _r) { radius = _r; }
+      IntCircle(int32 _x = 0, int32 _y = 0, int32 _r = 0) :cx(_x), cy(_y), radius(_r) {};
 };
 enum class mid_types
 {
@@ -588,5 +597,6 @@ extern std::map <int32, map_shape>  map_shapes;
 extern own_vessel_class own_vessel;
 extern std::map<int32, vessel> vessels;
 extern satellites sat;
+
 
 #endif
